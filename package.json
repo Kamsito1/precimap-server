@@ -19,5 +19,8 @@
     "multer": "^2.0.1",
     "node-fetch": "^2.7.0",
     "validator": "^13.15.26"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
