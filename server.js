@@ -293,11 +293,11 @@ app.get('/api/levels', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.4.0', db: 'supabase', stations: _gasCache?.length || 0 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.5.2', db: 'supabase', stations: _gasCache?.length || 0 }));
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
-  server: '3.4.0',
+  server: '3.5.2',
   app: '1.0.2',
   features: ['gasolineras-12213','chollos-50','eventos-30','usuarios-25','trending-deals','trending-events','search-global','tips-ahorro-8'],
   updated: '2026-03-26',
@@ -341,7 +341,7 @@ app.get('/api/stats', async (req, res) => {  try {
       places, prices, deals, users, events, price_history: priceHistory,
       gasolineras: _gasCache?.length || 0,
       gas_stats: gasStats,
-      version: '3.4.0',
+      version: '3.5.2',
     });
   } catch(e) { fail(res, e.message, 500); }
 });
@@ -665,8 +665,12 @@ app.get('/api/deals', optAuth, async (req, res) => {
     const { cat='all', sort='hot', search, limit=20, offset=0, min_price, max_price, min_discount } = req.query;
     const now = new Date().toISOString();
 
+    // Auto-expire deals past their expiry date
+    await supabase.from('deals').update({ is_active: 0 })
+      .eq('is_active', 1).lt('expires_at', now).catch(() => {});
+
     let q = supabase.from('deals')
-      .select('*, users(id,name,avatar_url)')
+      .select('*, users(id,name,avatar_url), deal_comments(id)')
       .eq('is_active', 1);
     try { q = q.or(`expires_at.is.null,expires_at.gt.${now}`); } catch {}
 
@@ -676,8 +680,6 @@ app.get('/api/deals', optAuth, async (req, res) => {
     if (max_price) q = q.lte('deal_price', parseFloat(max_price));
     if (min_discount) q = q.gte('discount_percent', parseFloat(min_discount));
 
-    // Hot score: votes_up - votes_down weighted by recency
-    // Sort in Supabase, compute hot_score client-side after
     if (sort === 'hot' || sort === 'temp')
       q = q.order('votes_up', { ascending: false }).order('detected_at', { ascending: false });
     else if (sort === 'new')
@@ -691,21 +693,22 @@ app.get('/api/deals', optAuth, async (req, res) => {
     const { data, error } = await q;
     if (error) throw error;
 
-    // Compute temperature for each deal
     const deals = (data || []).map(d => {
       const ageHours = (Date.now() - new Date(d.detected_at)) / 3600000;
       const score = (d.votes_up||0) - (d.votes_down||0);
-      const decayedScore = score / Math.pow(ageHours + 2, 1.5); // gravity decay like HN
+      const decayedScore = score / Math.pow(ageHours + 2, 1.5);
       let temp, tempColor;
-      if (score >= 20 || decayedScore > 3)      { temp='🔥🔥🔥'; tempColor='#DC2626'; }
-      else if (score >= 10 || decayedScore > 1.5){ temp='🔥🔥';  tempColor='#EA580C'; }
-      else if (score >= 3  || decayedScore > 0.5){ temp='🔥';    tempColor='#D97706'; }
-      else if (score >= 0)                        { temp='😐';    tempColor='#6B7280'; }
-      else                                        { temp='🧊';    tempColor='#3B82F6'; }
-      return { ...d, hot_score: decayedScore, temperature: temp, temp_color: tempColor };
+      if (score >= 20 || decayedScore > 3)       { temp='🔥🔥🔥'; tempColor='#DC2626'; }
+      else if (score >= 10 || decayedScore > 1.5) { temp='🔥🔥';  tempColor='#EA580C'; }
+      else if (score >= 3  || decayedScore > 0.5) { temp='🔥';    tempColor='#D97706'; }
+      else if (score >= 0)                         { temp='😐';    tempColor='#6B7280'; }
+      else                                         { temp='🧊';    tempColor='#3B82F6'; }
+      // Add comment_count from joined data
+      const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.filter(c => !c.is_deleted).length : 0;
+      const { deal_comments, ...cleanDeal } = d;
+      return { ...cleanDeal, hot_score: decayedScore, temperature: temp, temp_color: tempColor, comment_count };
     });
 
-    // Re-sort by hot_score if 'hot'
     if (sort === 'hot') deals.sort((a,b) => b.hot_score - a.hot_score);
 
     res.set('X-Total-Count', deals.length);
