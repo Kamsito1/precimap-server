@@ -1083,6 +1083,19 @@ app.get('/api/gasolineras', async (req, res) => {
 });
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
+// Trending events — top 5 most voted upcoming events
+app.get('/api/events/trending', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data, error } = await supabase.from('events')
+      .select('id,title,category,date,city,is_free,price_from,votes_up')
+      .eq('is_active', 1).gte('date', today)
+      .order('votes_up', { ascending: false }).limit(5);
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.get('/api/events', async (req, res) => {
   try {
     const { cat, sort='date', city, source, limit=50, search } = req.query;
