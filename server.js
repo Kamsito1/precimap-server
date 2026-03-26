@@ -336,6 +336,35 @@ app.get('/api/users/me', auth, async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
+// My deals — user's own published deals
+app.get('/api/users/me/deals', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('deals')
+      .select('*')
+      .eq('reported_by', req.user.id)
+      .eq('is_active', 1)
+      .order('detected_at', { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    // Add temperature
+    const now = Date.now();
+    const deals = (data||[]).map(d => {
+      const ageH = (now - new Date(d.detected_at)) / 3600000;
+      const score = (d.votes_up||0) - (d.votes_down||0);
+      const dec = score / Math.pow(ageH+2, 1.5);
+      let temp, tc;
+      if (score>=20||dec>3) { temp='🔥🔥🔥'; tc='#DC2626'; }
+      else if (score>=10||dec>1.5) { temp='🔥🔥'; tc='#EA580C'; }
+      else if (score>=3||dec>0.5) { temp='🔥'; tc='#D97706'; }
+      else if (score>=0) { temp='😐'; tc='#6B7280'; }
+      else { temp='🧊'; tc='#3B82F6'; }
+      return { ...d, temperature: temp, temp_color: tc };
+    });
+    res.json(deals);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 // Upload avatar photo
 app.post('/api/users/avatar', auth, upload.single('avatar'), async (req, res) => {
   try {
