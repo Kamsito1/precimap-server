@@ -534,17 +534,19 @@ app.get('/api/leaderboard', async (req, res) => {
 // ─── DEALS (CHOLLOS) ──────────────────────────────────────────────────────────
 app.get('/api/deals', optAuth, async (req, res) => {
   try {
-    const { cat='all', sort='hot', search, limit=20, offset=0 } = req.query;
+    const { cat='all', sort='hot', search, limit=20, offset=0, min_price, max_price, min_discount } = req.query;
     const now = new Date().toISOString();
 
     let q = supabase.from('deals')
       .select('*, users(id,name,avatar_url)')
       .eq('is_active', 1);
-    // Filter expired deals if column exists (graceful degradation)
     try { q = q.or(`expires_at.is.null,expires_at.gt.${now}`); } catch {}
 
     if (cat && cat !== 'all') q = q.eq('category', cat);
     if (search) q = q.ilike('title', `%${search}%`);
+    if (min_price) q = q.gte('deal_price', parseFloat(min_price));
+    if (max_price) q = q.lte('deal_price', parseFloat(max_price));
+    if (min_discount) q = q.gte('discount_percent', parseFloat(min_discount));
 
     // Hot score: votes_up - votes_down weighted by recency
     // Sort in Supabase, compute hot_score client-side after
