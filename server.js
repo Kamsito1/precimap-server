@@ -1097,33 +1097,33 @@ app.get('/api/places', optAuth, async (req, res) => {
       if (product && prices.length === 0) return null;
 
       // Compute representative price based on category:
-      // - gasolinera/supermercado: minimum price (cheapest item)
-      // - restaurante: average of meal-like items (excluding drinks under 2€)
-      // - farmacia: average of medicine products (excluding very cheap items <0.5€)
-      // - others: average of all prices
       let repPrice = null;
+      let repContext = null; // human-readable context for UI
       if (prices.length > 0) {
         const cat = place.category;
         if (cat === 'gasolinera' || cat === 'supermercado') {
           repPrice = Math.min(...prices.map(p => p.price));
+          repContext = `${prices.length} productos`;
         } else if (cat === 'restaurante') {
-          // Use average of platos (>= 3€) to avoid coffees/water skewing downwards
+          // Average of platos (>= 3€) to avoid coffees/water skewing downwards
           const platos = prices.filter(p => p.price >= 3);
           const src = platos.length >= 2 ? platos : prices;
           repPrice = src.reduce((a,b) => a + b.price, 0) / src.length;
+          repContext = `Media de ${src.length} plato${src.length !== 1 ? 's' : ''} · media España ~12€`;
         } else if (cat === 'farmacia') {
-          // Use average of real medicines (>= 1€), exclude masks/bandages
+          // Average of real medicines (>= 1€), exclude masks/bandages
           const meds = prices.filter(p => p.price >= 1);
           const src = meds.length >= 1 ? meds : prices;
           repPrice = src.reduce((a,b) => a + b.price, 0) / src.length;
+          repContext = `Media de ${src.length} medicamento${src.length !== 1 ? 's' : ''} · media España ~4€`;
         } else {
-          // Default: average of all prices
           repPrice = prices.reduce((a,b) => a + b.price, 0) / prices.length;
+          repContext = `Media de ${prices.length} productos`;
         }
         repPrice = Math.round(repPrice * 100) / 100;
       }
 
-      return { ...place, prices, minPrice: repPrice, repPrice };
+      return { ...place, prices, minPrice: repPrice, repPrice, repContext };
 
     });
     const filtered = result.filter(Boolean);
