@@ -293,11 +293,11 @@ app.get('/api/levels', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.5.2', db: 'supabase', stations: _gasCache?.length || 0 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.5.3', db: 'supabase', stations: _gasCache?.length || 0 }));
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
-  server: '3.5.2',
+  server: '3.5.3',
   app: '1.0.2',
   features: ['gasolineras-12213','chollos-50','eventos-30','usuarios-25','trending-deals','trending-events','search-global','tips-ahorro-8'],
   updated: '2026-03-26',
@@ -347,7 +347,7 @@ app.get('/api/stats', async (req, res) => {  try {
       places, prices, deals, users, events, price_history: priceHistory,
       gasolineras: _gasCache?.length || 0,
       gas_stats: gasStats,
-      version: '3.5.2',
+      version: '3.5.3',
     });
   } catch(e) { fail(res, e.message, 500); }
 });
