@@ -806,11 +806,12 @@ app.get('/api/places/:id/price-history', async (req, res) => {
 
 app.get('/api/places', optAuth, async (req, res) => {
   try {
-    const { cat, lat, lng, radius, city, product, sort='proximity' } = req.query;
+    const { cat, lat, lng, radius, city, product, sort='proximity', search } = req.query;
     let q = supabase.from('places').select('*').eq('is_active', 1);
     if (cat && cat!=='all') q = q.eq('category', cat);
     const hasCity = city && city.trim() !== '';
     if (hasCity) q = q.or(`address.ilike.%${city}%,city.ilike.%${city}%`);
+    if (search) q = q.ilike('name', `%${search}%`);
     const { data: places, error } = await q.limit(500);
     if (error) throw error;
     let list = places || [];
