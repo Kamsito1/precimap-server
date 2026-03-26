@@ -428,6 +428,52 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+// ─── GOOGLE SIGN-IN ─────────────────────────────────────────────────────────
+app.post('/api/auth/google', authLimiter, async (req, res) => {
+  try {
+    const { email, name, google_id, avatar_url } = req.body;
+    if (!email) return fail(res, 'Email requerido');
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Check if user already exists
+    let user = await db.query('users', { eq: { email: normalizedEmail }, single: true }).catch(() => null);
+
+    if (user) {
+      // Existing user — update google_id and avatar if missing
+      const updates = {};
+      if (google_id && !user.google_id) updates.google_id = google_id;
+      if (avatar_url && !user.avatar_url) updates.avatar_url = avatar_url;
+      if (Object.keys(updates).length > 0) {
+        await db.update('users', user.id, updates).catch(() => {});
+      }
+      // Update streak
+      const today = new Date().toISOString().split('T')[0];
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+      let streak = user.streak || 0;
+      if (user.last_report_date === yesterday) streak++;
+      else if (user.last_report_date !== today) streak = 1;
+      await db.update('users', user.id, { streak, last_report_date: today }).catch(() => {});
+      checkBadges(user.id).catch(() => {});
+      const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+      res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points, avatar_url: user.avatar_url || avatar_url, streak, is_admin: isAdmin(user.email) } });
+    } else {
+      // New user — register with Google (no password needed)
+      const randomHash = await bcrypt.hash(Math.random().toString(36) + Date.now(), 10);
+      user = await db.insert('users', {
+        name: (name || 'Usuario').trim(),
+        email: normalizedEmail,
+        password_hash: randomHash, // Random hash — user can set password later via "change password"
+        google_id: google_id || null,
+        avatar_url: avatar_url || null,
+        points: 0, streak: 1,
+        last_report_date: new Date().toISOString().split('T')[0],
+      });
+      const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+      res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: 0, avatar_url: avatar_url, streak: 1, is_admin: isAdmin(user.email) } });
+    }
+  } catch (e) { fail(res, e.message); }
+});
+
 app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
