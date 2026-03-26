@@ -1115,11 +1115,15 @@ app.get('/api/places', optAuth, async (req, res) => {
           repPrice = weeklyEst;
           repContext = `~${weeklyEst.toFixed(0)}€/semana · ${prices.length} productos reportados`;
         } else if (cat === 'gimnasio') {
-          // Min monthly fee
-          const fees = prices.filter(p => p.product?.toLowerCase().includes('básica') || p.product?.toLowerCase().includes('mensual'));
-          const src = fees.length > 0 ? fees : prices.filter(p => p.price > 0);
+          // Min monthly fee (only real fees > 0, not enrollment)
+          const fees = prices.filter(p => p.price > 0 && (
+            p.product?.toLowerCase().includes('básica') ||
+            p.product?.toLowerCase().includes('mensual') ||
+            p.product?.toLowerCase().includes('cuota')
+          ));
+          const src = fees.length > 0 ? fees : prices.filter(p => p.price > 5);
           repPrice = src.length > 0 ? Math.min(...src.map(p => p.price)) : null;
-          repContext = repPrice ? `desde ${repPrice}€/mes` : null;
+          repContext = repPrice ? `desde ${repPrice.toFixed(2)}€/mes` : null;
         } else if (cat === 'restaurante') {
           // Average of platos (>= 3€) to avoid coffees/water skewing downwards
           const platos = prices.filter(p => p.price >= 3);
