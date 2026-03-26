@@ -55,6 +55,11 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/public', express.static(path.join(__dirname, 'public')));
+
+// Privacy & Terms pages (Apple requires accessible URL)
+app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public/privacy.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public/privacy.html')));
+
 // Note: apiLimiter applied after its declaration below
 
 // ─── RATE LIMITING ────────────────────────────────────────────────────────────
