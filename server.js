@@ -1101,9 +1101,25 @@ app.get('/api/places', optAuth, async (req, res) => {
       let repContext = null; // human-readable context for UI
       if (prices.length > 0) {
         const cat = place.category;
-        if (cat === 'gasolinera' || cat === 'supermercado') {
+        if (cat === 'gasolinera') {
           repPrice = Math.min(...prices.map(p => p.price));
-          repContext = `${prices.length} productos`;
+          repContext = `${prices.length} carburantes`;
+        } else if (cat === 'supermercado') {
+          // Weekly basket: estimate based on community prices
+          // Average Spanish family spends ~100-130€/week on groceries
+          // We calculate from reported prices * avg quantities per week
+          const priceList = prices.map(p => p.price);
+          const avgUnit = priceList.reduce((a,b)=>a+b,0) / priceList.length;
+          // Approx weekly basket = avg unit price * typical items per week (30)
+          const weeklyEst = Math.round(avgUnit * 30 * 100) / 100;
+          repPrice = weeklyEst;
+          repContext = `~${weeklyEst.toFixed(0)}€/semana · ${prices.length} productos reportados`;
+        } else if (cat === 'gimnasio') {
+          // Min monthly fee
+          const fees = prices.filter(p => p.product?.toLowerCase().includes('básica') || p.product?.toLowerCase().includes('mensual'));
+          const src = fees.length > 0 ? fees : prices.filter(p => p.price > 0);
+          repPrice = src.length > 0 ? Math.min(...src.map(p => p.price)) : null;
+          repContext = repPrice ? `desde ${repPrice}€/mes` : null;
         } else if (cat === 'restaurante') {
           // Average of platos (>= 3€) to avoid coffees/water skewing downwards
           const platos = prices.filter(p => p.price >= 3);
