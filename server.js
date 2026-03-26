@@ -1061,8 +1061,36 @@ app.get('/api/places', optAuth, async (req, res) => {
       let prices = (pricesByPlace[place.id] || []).slice(0, 10);
       if (product) prices = prices.filter(p => fuzzyMatch(product, p.product));
       if (product && prices.length === 0) return null;
-      const minPrice = prices.length ? Math.min(...prices.map(p => p.price)) : null;
-      return { ...place, prices, minPrice };
+
+      // Compute representative price based on category:
+      // - gasolinera/supermercado: minimum price (cheapest item)
+      // - restaurante: average of meal-like items (excluding drinks under 2€)
+      // - farmacia: average of medicine products (excluding very cheap items <0.5€)
+      // - others: average of all prices
+      let repPrice = null;
+      if (prices.length > 0) {
+        const cat = place.category;
+        if (cat === 'gasolinera' || cat === 'supermercado') {
+          repPrice = Math.min(...prices.map(p => p.price));
+        } else if (cat === 'restaurante') {
+          // Use average of platos (>= 3€) to avoid coffees/water skewing downwards
+          const platos = prices.filter(p => p.price >= 3);
+          const src = platos.length >= 2 ? platos : prices;
+          repPrice = src.reduce((a,b) => a + b.price, 0) / src.length;
+        } else if (cat === 'farmacia') {
+          // Use average of real medicines (>= 1€), exclude masks/bandages
+          const meds = prices.filter(p => p.price >= 1);
+          const src = meds.length >= 1 ? meds : prices;
+          repPrice = src.reduce((a,b) => a + b.price, 0) / src.length;
+        } else {
+          // Default: average of all prices
+          repPrice = prices.reduce((a,b) => a + b.price, 0) / prices.length;
+        }
+        repPrice = Math.round(repPrice * 100) / 100;
+      }
+
+      return { ...place, prices, minPrice: repPrice, repPrice };
+
     });
     const filtered = result.filter(Boolean);
     if (sort==='price') filtered.sort((a,b)=>(a.minPrice??999)-(b.minPrice??999));
