@@ -1596,10 +1596,59 @@ async function expireOldEvents() {
 expireOldEvents();
 setInterval(expireOldEvents, 6 * 60 * 60 * 1000); // every 6h
 
+// ─── AMAZON SCRAPER — Cron job cada 6 horas ───────────────────────────────────
+const { runAmazonScraper } = require('./amazon_scraper');
+
+// ID del usuario bot (PreciMap Bot) — si no existe lo creamos
+let BOT_USER_ID = process.env.BOT_USER_ID || null;
+
+async function ensureBotUser() {
+  try {
+    if (BOT_USER_ID) return BOT_USER_ID;
+    // Check if bot user exists
+    const { data: existing } = await supabase.from('users')
+      .select('id').eq('email', 'bot@precimap.es').single();
+    if (existing) { BOT_USER_ID = existing.id; return BOT_USER_ID; }
+    // Create bot user
+    const hashed = await bcrypt.hash('bot_' + Date.now(), 10);
+    const { data: newUser } = await supabase.from('users').insert({
+      name: 'PreciMap Bot 🤖',
+      email: 'bot@precimap.es',
+      password_hash: hashed,
+      is_active: 1,
+      is_admin: 0,
+      points: 0,
+    }).select('id').single();
+    if (newUser) { BOT_USER_ID = newUser.id; console.log('✅ Bot user created:', BOT_USER_ID); }
+    return BOT_USER_ID;
+  } catch(e) { console.error('Bot user error:', e.message); return null; }
+}
+
+async function runScraperJob() {
+  try {
+    const botId = await ensureBotUser();
+    if (!botId) { console.log('⚠️ No bot user ID, skipping scraper'); return; }
+    const result = await runAmazonScraper(supabase, botId);
+    console.log(`🤖 Scraper result:`, result);
+  } catch(e) { console.error('Scraper job error:', e.message); }
+}
+
+// Run after 30s startup delay, then every 6 hours
+setTimeout(runScraperJob, 30000);
+setInterval(runScraperJob, 6 * 60 * 60 * 1000);
+
+// Endpoint manual para admin — forzar scraper
+app.post('/api/admin/run-scraper', auth, async (req, res) => {
+  if (!req.user.is_admin) return fail(res, 'No autorizado', 403);
+  runScraperJob().catch(console.error);
+  res.json({ ok: true, message: 'Scraper lanzado en background' });
+});
+
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🗺️  PreciMap v3.1.0 en http://localhost:${PORT}`);
+  console.log(`\n🗺️  PreciMap v3.5.1 en http://localhost:${PORT}`);
   console.log(`🔗 Amazon afiliado: ${process.env.AMAZON_AFFILIATE_TAG}`);
+  console.log(`🤖 Scraper Amazon: activo cada 6h`);
   console.log(`🗄️  Base de datos: Supabase (${process.env.SUPABASE_URL ? '✅ Connected' : '❌ No URL'})\n`);
 });
 
