@@ -10,6 +10,10 @@ const fs         = require('fs');
 const rateLimit  = require('express-rate-limit');
 const validator  = require('validator');
 const { createClient } = require('@supabase/supabase-js');
+
+// ─── ADMIN CONFIG ────────────────────────────────────────────────────────────
+const ADMIN_EMAILS = ['sitoexpositorodriguez@gmail.com'];
+const isAdmin = (email) => ADMIN_EMAILS.includes((email||'').toLowerCase());
 const { applyOurTag, detectStore } = require('./affiliates');
 
 const app  = express();
@@ -129,6 +133,15 @@ function auth(req, res, next) {
   try { req.user = jwt.verify(token, JWT_SECRET); next(); }
   catch { fail(res, 'Token inválido', 401); }
 }
+function adminAuth(req, res, next) {
+  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!token) return fail(res, 'No autenticado', 401);
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    if (!isAdmin(req.user.email)) return fail(res, 'Acceso solo para administradores', 403);
+    next();
+  } catch { fail(res, 'Token inválido', 401); }
+}
 function optAuth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   if (token) { try { req.user = jwt.verify(token, JWT_SECRET); } catch {} }
@@ -187,42 +200,92 @@ const db = {
 };
 
 // ─── GAMIFICATION ─────────────────────────────────────────────────────────────
+const RANK_LEVELS = [
+  { min: 0,    title: 'Novato',      emoji: '🌱', perks: ['Reportar precios','Votar chollos'] },
+  { min: 50,   title: 'Ahorrador',   emoji: '💰', perks: ['Publicar chollos','Comentar en eventos'] },
+  { min: 150,  title: 'Experto',     emoji: '⭐', perks: ['Votar cambios de precio','Reportar expirados'] },
+  { min: 400,  title: 'Gurú',        emoji: '🏆', perks: ['Destacar chollos propios','Badge verificado'] },
+  { min: 1000, title: 'Leyenda',     emoji: '👑', perks: ['Prioridad en reportes','Mención en top 3','Icono exclusivo'] },
+];
+const BADGES_DEF = [
+  { key:'primer_reporte',  name:'Primer Reporte',     emoji:'📍', desc:'Reportaste tu primer precio',         pts:5  },
+  { key:'diez_reportes',   name:'Reportero',          emoji:'📊', desc:'10 precios reportados',              pts:15 },
+  { key:'cincuenta',       name:'Experto Local',      emoji:'🌟', desc:'50 precios reportados',              pts:50 },
+  { key:'cien_reportes',   name:'Maestro Ahorro',     emoji:'💎', desc:'100 precios reportados',             pts:100},
+  { key:'primer_chollo',   name:'Cazachollos',        emoji:'🔥', desc:'Publicaste tu primer chollo',        pts:10 },
+  { key:'cinco_chollos',   name:'Chollero',           emoji:'🎯', desc:'5 chollos publicados',               pts:25 },
+  { key:'chollo_viral',    name:'Viral',              emoji:'🚀', desc:'Un chollo tuyo superó 50 votos',     pts:50 },
+  { key:'racha_7',         name:'Racha Semanal',      emoji:'🔥', desc:'7 días consecutivos activo',         pts:15 },
+  { key:'racha_30',        name:'Mes Constante',      emoji:'📅', desc:'30 días consecutivos activo',        pts:50 },
+  { key:'primer_voto',     name:'Votante',            emoji:'👍', desc:'Votaste por primera vez',            pts:2  },
+  { key:'precio_aprobado', name:'Verificador',        emoji:'✅', desc:'Un cambio de precio fue aprobado',   pts:20 },
+  { key:'madrugador',      name:'Madrugador',         emoji:'🌅', desc:'Reportaste precio antes de las 8am', pts:10 },
+  { key:'explorador',      name:'Explorador',         emoji:'🗺️',  desc:'Reportaste en 5 ciudades distintas', pts:30 },
+];
+
+function getRankByPoints(pts) {
+  const levels = [...RANK_LEVELS].reverse();
+  return levels.find(l => pts >= l.min) || RANK_LEVELS[0];
+}
+
 async function addPoints(userId, points, reason) {
   try {
     await supabase.rpc('increment_points', { uid: userId, pts: points });
     await db.insert('notifications', { user_id: userId, type: 'points', message: `+${points} puntos por ${reason}` });
-    // Auto-update rank_title based on new point total
     const user = await db.query('users', { eq: { id: userId }, single: true });
     if (user) {
-      const pts = (user.points || 0) + points;
-      const rank = pts >= 1000 ? 'Leyenda' : pts >= 400 ? 'Gurú' : pts >= 150 ? 'Experto' : pts >= 50 ? 'Ahorrador' : 'Novato';
-      await db.update('users', userId, { rank_title: rank });
+      const newPts = (user.points || 0) + points;
+      const rank = getRankByPoints(newPts);
+      const prevRank = getRankByPoints(user.points || 0);
+      const updates = { rank_title: rank.title };
+      await db.update('users', userId, updates);
+      // Level-up notification
+      if (rank.title !== prevRank.title) {
+        await db.insert('notifications', { user_id: userId, type: 'level_up',
+          message: `🎉 ¡Has subido de nivel! Ahora eres ${rank.emoji} ${rank.title}` });
+      }
     }
   } catch {}
 }
+
 async function checkBadges(userId) {
   try {
-    const [reports, deals, streak] = await Promise.all([
+    const [reports, deals, votes, user] = await Promise.all([
       db.count('prices', { eq: { reported_by: userId } }),
       db.count('deals',  { eq: { reported_by: userId } }),
-      db.query('users',  { eq: { id: userId }, select: 'streak', single: true }),
+      db.count('deal_votes', { eq: { user_id: userId } }),
+      db.query('users',  { eq: { id: userId }, single: true }),
     ]);
-    const earned = (await db.query('badges', { eq: { user_id: userId }, select: 'key' }) || []).map(b=>b.key);
+    const existingBadges = (await db.query('badges', { eq: { user_id: userId }, select: 'key' }) || []).map(b=>b.key);
     const award = async (key, name, pts) => {
-      if (!earned.includes(key)) {
+      if (!existingBadges.includes(key)) {
         await db.insert('badges', { user_id: userId, key });
-        await db.insert('notifications', { user_id: userId, type: 'badge', message: `🎖️ Nuevo logro: ${name}` });
-        await addPoints(userId, pts, `logro ${name}`);
+        await db.insert('notifications', { user_id: userId, type: 'badge',
+          message: `🎖️ ¡Nuevo logro desbloqueado: ${name}!` });
+        await addPoints(userId, pts, `logro "${name}"`);
       }
     };
-    if (reports >= 1)  await award('primer_reporte',  'Primer Reporte', 5);
-    if (reports >= 10) await award('diez_reportes',   '10 Reportes', 15);
-    if (reports >= 50) await award('cincuenta',       'Experto Local', 50);
-    if (deals >= 1)    await award('primer_chollo',   'Primer Chollo', 10);
-    if (streak?.streak >= 7)  await award('racha_7',  'Racha 7 días', 15);
-    if (streak?.streak >= 30) await award('racha_30', 'Mes Constante', 50);
+    const def = Object.fromEntries(BADGES_DEF.map(b => [b.key, b]));
+    if (reports >= 1)  await award('primer_reporte', def.primer_reporte.name, def.primer_reporte.pts);
+    if (reports >= 10) await award('diez_reportes',  def.diez_reportes.name,  def.diez_reportes.pts);
+    if (reports >= 50) await award('cincuenta',      def.cincuenta.name,      def.cincuenta.pts);
+    if (reports >= 100) await award('cien_reportes', def.cien_reportes.name,  def.cien_reportes.pts);
+    if (deals >= 1)    await award('primer_chollo',  def.primer_chollo.name,  def.primer_chollo.pts);
+    if (deals >= 5)    await award('cinco_chollos',  def.cinco_chollos.name,  def.cinco_chollos.pts);
+    if (votes >= 1)    await award('primer_voto',    def.primer_voto.name,    def.primer_voto.pts);
+    if ((user?.streak || 0) >= 7)  await award('racha_7',  def.racha_7.name,  def.racha_7.pts);
+    if ((user?.streak || 0) >= 30) await award('racha_30', def.racha_30.name, def.racha_30.pts);
+    // Viral badge - check if any deal by user has 50+ votes
+    const { data: viralDeals } = await supabase.from('deals').select('id')
+      .eq('reported_by', userId).gte('votes_up', 50).limit(1);
+    if (viralDeals?.length > 0) await award('chollo_viral', def.chollo_viral.name, def.chollo_viral.pts);
   } catch {}
 }
+
+// API endpoint for levels info
+app.get('/api/levels', (req, res) => {
+  res.json({ levels: RANK_LEVELS, badges: BADGES_DEF });
+});
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -297,7 +360,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const hash = await bcrypt.hash(password, 12);
     const user = await db.insert('users', { name: name.trim(), email: normalizedEmail, password_hash: hash, points: 0, streak: 0 });
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: 0 } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: 0, is_admin: isAdmin(user.email) } });
   } catch(e) { fail(res, e.message); }
 });
 
@@ -319,7 +382,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     else if (user.last_report_date !== today) streak = 1;
     await db.update('users', user.id, { streak, last_report_date: today }).catch(()=>{});
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points, avatar_url: user.avatar_url, streak } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points, avatar_url: user.avatar_url, streak, is_admin: isAdmin(user.email) } });
   } catch(e) { fail(res, e.message); }
 });
 
@@ -718,8 +781,9 @@ app.delete('/api/deals/:id', auth, async (req, res) => {
   try {
     const deal = await db.query('deals', { eq: { id: req.params.id }, single: true });
     if (!deal) return fail(res, 'No encontrado', 404);
-    if (deal.reported_by !== req.user.id) return fail(res, 'Sin permiso', 403);
-    await db.update('deals', deal.id, { is_active: 0 });
+    // Admin can delete anything; owner can only soft-delete their own
+    if (!isAdmin(req.user.email) && deal.reported_by !== req.user.id) return fail(res, 'Sin permiso', 403);
+    await db.update('deals', deal.id, { is_active: 0, deleted_at: new Date().toISOString() });
     res.json({ ok: true });
   } catch(e) { fail(res, e.message); }
 });
@@ -1297,6 +1361,157 @@ app.post('/api/favorites/:placeId', auth, async (req, res) => {
     res.json({ ok: true, favorited: true });
   } catch(e) { fail(res, e.message); }
 });
+
+// ─── DEAL EXPIRE VOTING SYSTEM ────────────────────────────────────────────────
+// Users vote that a deal has expired. At 5 votes it auto-deactivates.
+
+app.post('/api/deals/:id/report-expired', auth, async (req, res) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    // Check already voted
+    const { data: already } = await supabase.from('deal_expire_votes')
+      .select('id').eq('deal_id', dealId).eq('user_id', req.user.id).single();
+    if (already) return fail(res, 'Ya has reportado esta oferta como expirada');
+    // Insert vote
+    await supabase.from('deal_expire_votes').insert({ deal_id: dealId, user_id: req.user.id });
+    // Count votes
+    const { count } = await supabase.from('deal_expire_votes')
+      .select('*', { count: 'exact', head: true }).eq('deal_id', dealId);
+    let deactivated = false;
+    if (count >= 5) {
+      await supabase.from('deals').update({ is_active: 0 }).eq('id', dealId);
+      deactivated = true;
+    } else {
+      await supabase.from('deals').update({ expire_reports: count }).eq('id', dealId);
+    }
+    await addPoints(req.user.id, 2, 'reportar oferta expirada');
+    res.json({ ok: true, expire_reports: count, deactivated });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// Admin delete deal (only is_admin users)
+app.delete('/api/deals/:id/admin', auth, async (req, res) => {
+  try {
+    const { data: u } = await supabase.from('users').select('is_admin').eq('id', req.user.id).single();
+    if (!u?.is_admin) return fail(res, 'Solo administradores pueden eliminar directamente', 403);
+    await supabase.from('deals').update({ is_active: 0 }).eq('id', parseInt(req.params.id));
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── PRICE CHANGE REQUEST SYSTEM (anti-troll voting) ─────────────────────────
+// Users propose price changes, community votes, auto-applies at +5 net votes
+
+app.get('/api/places/:placeId/price-changes', optAuth, async (req, res) => {
+  try {
+    const placeId = parseInt(req.params.placeId);
+    const { data, error } = await supabase
+      .from('price_change_requests')
+      .select('*, users(id,name,avatar_url)')
+      .eq('place_id', placeId)
+      .in('status', ['pending','approved'])
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.post('/api/places/:placeId/price-changes', auth, async (req, res) => {
+  try {
+    const placeId = parseInt(req.params.placeId);
+    const { product, new_price, reason } = req.body;
+    if (!product || !new_price || isNaN(parseFloat(new_price))) return fail(res, 'Producto y precio nuevo requeridos');
+    // Get current price
+    const { data: current } = await supabase.from('prices')
+      .select('price').eq('place_id', placeId).eq('product', product).single();
+    const old_price = current?.price || null;
+    // Check no pending request for same product
+    const { data: existing } = await supabase.from('price_change_requests')
+      .select('id').eq('place_id', placeId).eq('product', product).eq('status','pending').single();
+    if (existing) return fail(res, 'Ya hay una solicitud de cambio pendiente para este producto');
+    const { data: req2, error } = await supabase.from('price_change_requests').insert({
+      place_id: placeId, product, old_price, new_price: parseFloat(new_price),
+      reason: reason?.slice(0,200) || null, requested_by: req.user.id,
+      votes_up: 0, votes_down: 0, status: 'pending',
+    }).select().single();
+    if (error) throw error;
+    await addPoints(req.user.id, 3, 'solicitar cambio precio');
+    res.json({ ok: true, request: req2 });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.post('/api/price-changes/:id/vote', auth, async (req, res) => {
+  try {
+    const reqId = parseInt(req.params.id);
+    const { vote } = req.body; // 1 = approve, -1 = reject
+    if (![1,-1].includes(vote)) return fail(res, 'Voto inválido');
+    // Check already voted
+    const { data: existing } = await supabase.from('price_change_votes')
+      .select('id').eq('request_id', reqId).eq('user_id', req.user.id).single();
+    if (existing) return fail(res, 'Ya has votado esta solicitud');
+    // Record vote
+    await supabase.from('price_change_votes').insert({ request_id: reqId, user_id: req.user.id, vote });
+    // Update tallies
+    const field = vote === 1 ? 'votes_up' : 'votes_down';
+    const { data: pcr } = await supabase.from('price_change_requests')
+      .select('*').eq('id', reqId).single();
+    if (!pcr) return fail(res, 'Solicitud no encontrada');
+    const newUp = (pcr.votes_up || 0) + (vote === 1 ? 1 : 0);
+    const newDown = (pcr.votes_down || 0) + (vote === -1 ? 1 : 0);
+    const net = newUp - newDown;
+    let status = pcr.status;
+    // Auto-apply at +5 net votes
+    if (net >= 5 && status === 'pending') {
+      status = 'approved';
+      // Update the actual price
+      await supabase.from('prices').upsert({
+        place_id: pcr.place_id, product: pcr.product, price: pcr.new_price,
+        unit: 'ud', reported_by: pcr.requested_by, status: 'verified',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'place_id,product' });
+      // Add to history
+      await supabase.from('price_history').insert({
+        place_id: pcr.place_id, product: pcr.product, price: pcr.new_price,
+        reported_at: new Date().toISOString(),
+      });
+      await addPoints(pcr.requested_by, 10, 'precio aprobado por la comunidad');
+    }
+    // Auto-reject at -3 net votes
+    if (net <= -3 && status === 'pending') status = 'rejected';
+    await supabase.from('price_change_requests')
+      .update({ votes_up: newUp, votes_down: newDown, status }).eq('id', reqId);
+    await addPoints(req.user.id, 1, 'votar cambio precio');
+    res.json({ ok: true, votes_up: newUp, votes_down: newDown, net, status });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// Get all pending price changes (for community feed)
+app.get('/api/price-changes/pending', optAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('price_change_requests')
+      .select('*, places(id,name,city,category), users(id,name,avatar_url)')
+      .eq('status','pending')
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── AUTO-EXPIRE EVENTS (runs on startup + every 6h) ──────────────────────────
+async function expireOldEvents() {
+  try {
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const { data, error } = await supabase
+      .from('events').update({ is_active: 0 })
+      .eq('is_active', 1).lt('date', yesterday);
+    if (!error) console.log(`🗓️  Auto-expired events older than ${yesterday}`);
+  } catch(e) { console.error('Auto-expire error:', e.message); }
+}
+expireOldEvents();
+setInterval(expireOldEvents, 6 * 60 * 60 * 1000); // every 6h
 
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
