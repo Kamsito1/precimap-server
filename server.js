@@ -678,9 +678,9 @@ app.get('/api/deals', optAuth, async (req, res) => {
     const { cat='all', sort='hot', search, limit=20, offset=0, min_price, max_price, min_discount } = req.query;
     const now = new Date().toISOString();
 
-    // Auto-expire deals past their expiry date
-    await supabase.from('deals').update({ is_active: 0 })
-      .eq('is_active', 1).lt('expires_at', now).catch(() => {});
+    // Auto-expire deals past their expiry date (fire-and-forget, never block)
+    supabase.from('deals').update({ is_active: 0 })
+      .eq('is_active', 1).lt('expires_at', now).then(() => {}).catch(() => {});
 
     let q = supabase.from('deals')
       .select('*, users(id,name,avatar_url), deal_comments(id)')
