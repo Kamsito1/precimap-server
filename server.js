@@ -558,6 +558,53 @@ app.get('/api/users/me/deals', auth, async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
+// ─── FAVORITE GAS STATIONS (persistent across devices) ──────────────────────
+app.get('/api/users/me/favorites', auth, async (req, res) => {
+  try {
+    const favs = await db.query('favorite_stations', {
+      eq: { user_id: req.user.id },
+      order: { col: 'created_at', asc: false },
+    });
+    res.json(favs || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.post('/api/users/me/favorites', auth, async (req, res) => {
+  try {
+    const { station_id, station_name, station_city, lat, lng } = req.body;
+    if (!station_id) return fail(res, 'station_id requerido');
+    await db.upsert('favorite_stations', {
+      user_id: req.user.id, station_id: String(station_id),
+      station_name, station_city, lat, lng,
+    }, 'user_id,station_id');
+    ok(res, { saved: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.delete('/api/users/me/favorites/:stationId', auth, async (req, res) => {
+  try {
+    const { error } = await supabase.from('favorite_stations')
+      .delete()
+      .eq('user_id', req.user.id)
+      .eq('station_id', req.params.stationId);
+    if (error) throw error;
+    ok(res, { deleted: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── DEAL VOTES — get user's votes for persistence ──────────────────────────
+app.get('/api/users/me/votes', auth, async (req, res) => {
+  try {
+    const votes = await db.query('deal_votes', {
+      eq: { user_id: req.user.id },
+      select: 'deal_id,vote',
+    });
+    const map = {};
+    (votes || []).forEach(v => { map[v.deal_id] = v.vote; });
+    res.json(map);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 // Upload avatar photo
 app.post('/api/users/avatar', auth, upload.single('avatar'), async (req, res) => {
   try {
