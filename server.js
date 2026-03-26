@@ -14,7 +14,7 @@ const { createClient } = require('@supabase/supabase-js');
 // ─── ADMIN CONFIG ────────────────────────────────────────────────────────────
 const ADMIN_EMAILS = ['sitoexpositorodriguez@gmail.com'];
 const isAdmin = (email) => ADMIN_EMAILS.includes((email||'').toLowerCase());
-const { applyOurTag, detectStore } = require('./affiliates');
+const { applyOurTag, detectStore, extractAsin, getAmazonProductInfo } = require('./affiliates');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -707,6 +707,81 @@ app.get('/api/deals', optAuth, async (req, res) => {
     res.set('X-Total-Count', deals.length);
     res.json(deals);
   } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── AMAZON PRODUCT LOOKUP via PA API ────────────────────────────────────────
+app.get('/api/amazon/product', optAuth, async (req, res) => {
+  const { url } = req.query;
+  if (!url) return fail(res, 'URL requerida', 400);
+  const asin = extractAsin(url);
+  if (!asin) return fail(res, 'No se pudo extraer el ASIN de la URL', 400);
+  const product = await getAmazonProductInfo(asin);
+  if (!product) return fail(res, 'Producto no encontrado o error de API', 404);
+  res.json(product);
+});
+
+// ─── DEAL DUPLICATE CHECK ────────────────────────────────────────────────────
+// Chollometro-style: check URL + title similarity before posting
+app.post('/api/deals/check-duplicate', auth, async (req, res) => {
+  try {
+    const { url, title } = req.body;
+    const duplicates = [];
+
+    // 1. Exact URL match (normalize: strip query params except ASIN)
+    if (url) {
+      let cleanUrl = url.split('?')[0].toLowerCase().trim();
+      // For Amazon: extract ASIN
+      const asinMatch = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+      if (asinMatch) {
+        // Search by ASIN pattern in stored URLs
+        const { data: urlMatches } = await supabase.from('deals')
+          .select('id,title,deal_price,store,image_url,created_at,is_active')
+          .ilike('url', `%${asinMatch[1]}%`)
+          .eq('is_active', 1)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (urlMatches?.length) duplicates.push(...urlMatches.map(d => ({ ...d, match_type: 'url_exacta' })));
+      } else {
+        const { data: urlMatches } = await supabase.from('deals')
+          .select('id,title,deal_price,store,image_url,created_at,is_active')
+          .ilike('url', `%${cleanUrl}%`)
+          .eq('is_active', 1)
+          .limit(3);
+        if (urlMatches?.length) duplicates.push(...urlMatches.map(d => ({ ...d, match_type: 'url_similar' })));
+      }
+    }
+
+    // 2. Title similarity — check for very similar titles (>70% word overlap)
+    if (title && duplicates.length === 0) {
+      const words = title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+      if (words.length >= 2) {
+        // Search using first meaningful words
+        const searchTerm = words.slice(0, 3).join(' ');
+        const { data: titleMatches } = await supabase.from('deals')
+          .select('id,title,deal_price,store,image_url,created_at,is_active')
+          .ilike('title', `%${words[0]}%`)
+          .eq('is_active', 1)
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (titleMatches?.length) {
+          // Calculate overlap score
+          const scored = titleMatches.map(d => {
+            const dWords = d.title.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+            const overlap = words.filter(w => dWords.some(dw => dw.includes(w) || w.includes(dw))).length;
+            const score = overlap / Math.max(words.length, dWords.length);
+            return { ...d, match_type: 'titulo_similar', similarity: Math.round(score * 100) };
+          }).filter(d => d.similarity >= 60).sort((a,b) => b.similarity - a.similarity);
+          duplicates.push(...scored.slice(0, 3));
+        }
+      }
+    }
+
+    // Deduplicate by id
+    const seen = new Set();
+    const unique = duplicates.filter(d => { if (seen.has(d.id)) return false; seen.add(d.id); return true; });
+
+    res.json({ duplicates: unique, count: unique.length });
+  } catch(e) { res.json({ duplicates: [], count: 0 }); }
 });
 
 app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
