@@ -316,6 +316,12 @@ const SAVING_TIPS = [
   { id:10, emoji:'🏷️', title:'Compra marca blanca en Mercadona',     desc:'La marca Hacendado supera a marcas comerciales en muchos tests de cata ciega. Ahorra un 30%.', category:'super', saves:'~30€/mes' },
   { id:11, emoji:'📊', title:'Comparador de luz y gas OCU',          desc:'Cambiar de comercializadora de luz puede ahorrarte hasta 200€ al año. Usa el comparador de OCU.', category:'hogar', saves:'~200€/año' },
   { id:12, emoji:'🎫', title:'Tarjeta Lidl Plus para descuentos',    desc:'La app gratuita de Lidl Plus ofrece descuentos semanales exclusivos y cupones personalizados.', category:'super', saves:'~10€/semana' },
+  { id:13, emoji:'🌡️', title:'Bajada del termostato 1 grado',        desc:'Reducir la calefacción 1°C ahorra hasta un 7% en la factura. En invierno suma 50-80€ al año.', category:'hogar', saves:'~65€/año' },
+  { id:14, emoji:'📦', title:'Amazon: espera el Prime Day',           desc:'Las ofertas del Prime Day (julio) y Black Friday pueden superar el 50% de descuento en electrónica.', category:'tech', saves:'Variable' },
+  { id:15, emoji:'🏋️', title:'Gimnasio: negocia en enero',           desc:'Los gimnasios llenan en enero. Negocia en marzo-abril cuando bajan los socios y consigue hasta 50% dto.', category:'ocio', saves:'~30€/mes' },
+  { id:16, emoji:'💊', title:'Medicamentos genéricos',               desc:'Los genéricos tienen la misma eficacia que las marcas. Pregunta a tu farmacéutico — ahorra hasta un 70%.', category:'salud', saves:'~15€/mes' },
+  { id:17, emoji:'🚿', title:'Ducha en lugar de baño',              desc:'Un baño gasta 150L, una ducha de 5 min solo 50L. El ahorro anual en agua caliente puede ser de 80-120€.', category:'hogar', saves:'~100€/año' },
+  { id:18, emoji:'🛍️', title:'Cesta básica en Aldi + frescos en mercado', desc:'Aldi para secos/lácteos y mercado local para fruta y verdura: ahorro de hasta un 35% vs comprar todo en Mercadona.', category:'super', saves:'~50€/mes' },
 ];
 
 app.get('/api/tips', (req, res) => {
