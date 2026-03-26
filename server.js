@@ -381,6 +381,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if (user.last_report_date === yesterday) streak++;
     else if (user.last_report_date !== today) streak = 1;
     await db.update('users', user.id, { streak, last_report_date: today }).catch(()=>{});
+    // Check badges on login (catches users who earned badges before the system existed)
+    checkBadges(user.id).catch(() => {});
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points, avatar_url: user.avatar_url, streak, is_admin: isAdmin(user.email) } });
   } catch(e) { fail(res, e.message); }
@@ -1175,8 +1177,8 @@ async function fetchAllStations() {
   }
 }
 
-// Pre-warm cache on startup
-setTimeout(() => fetchAllStations().catch(() => {}), 3000);
+// Pre-warm cache on startup — delayed to let Railway healthcheck pass first
+setTimeout(() => fetchAllStations().catch(() => {}), 90000);
 // Refresh every 10 minutes
 setInterval(() => fetchAllStations().catch(() => {}), GAS_CACHE_TTL);
 
@@ -1643,8 +1645,8 @@ async function runScraperJob() {
   } catch(e) { console.error('Scraper job error:', e.message); }
 }
 
-// Run after 30s startup delay, then every 6 hours
-setTimeout(runScraperJob, 30000);
+// Run after 2min startup delay (after healthcheck passes), then every 6 hours
+setTimeout(runScraperJob, 120000);
 setInterval(runScraperJob, 6 * 60 * 60 * 1000);
 
 // Verificación de ofertas más frecuente — cada 3 horas
@@ -1656,6 +1658,20 @@ setInterval(async () => {
 }, 3 * 60 * 60 * 1000);
 
 // Endpoint manual para admin — forzar scraper o verificación
+// Admin: re-award badges to all users (retroactive)
+app.post('/api/admin/recheck-badges', auth, async (req, res) => {
+  if (!req.user.is_admin) return fail(res, 'No autorizado', 403);
+  try {
+    const { data: users } = await supabase.from('users').select('id,name').eq('is_deleted', 0).limit(200);
+    let count = 0;
+    for (const u of (users || [])) {
+      await checkBadges(u.id).catch(() => {});
+      count++;
+    }
+    res.json({ ok: true, checked: count });
+  } catch(e) { fail(res, e.message); }
+});
+
 app.post('/api/admin/run-scraper', auth, async (req, res) => {
   if (!req.user.is_admin) return fail(res, 'No autorizado', 403);
   const { action = 'all' } = req.body;
