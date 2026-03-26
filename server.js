@@ -1233,6 +1233,14 @@ app.post('/api/events/:id/vote', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+// Admin deactivate event
+app.post('/api/events/:id/deactivate', adminAuth, async (req, res) => {
+  try {
+    await supabase.from('events').update({ is_active: 0 }).eq('id', parseId(req.params.id));
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message); }
+});
+
 // ─── BANKS ───────────────────────────────────────────────────────────────────
 app.get('/api/banks', async (req, res) => {
   try {
