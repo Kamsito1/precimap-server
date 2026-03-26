@@ -649,13 +649,15 @@ app.get('/api/deals/trending', async (req, res) => {
   try {
     const since = new Date(Date.now() - 7*24*3600000).toISOString();
     const { data, error } = await supabase.from('deals')
-      .select('id,title,deal_price,original_price,discount_percent,store,category,votes_up,votes_down,detected_at,url')
+      .select('id,title,deal_price,original_price,discount_percent,store,category,image_url,votes_up,votes_down,detected_at,url,deal_comments(id)')
       .eq('is_active', 1).gte('detected_at', since).order('votes_up', { ascending: false }).limit(5);
     if (error) throw error;
     const trending = (data||[]).map(d => {
       const ageHours = (Date.now() - new Date(d.detected_at)) / 3600000;
       const score = (d.votes_up||0) - (d.votes_down||0);
-      return { ...d, hot_score: score / Math.pow(ageHours + 2, 1.5),
+      const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.length : 0;
+      const { deal_comments, ...clean } = d;
+      return { ...clean, comment_count, hot_score: score / Math.pow(ageHours + 2, 1.5),
         temperature: score >= 20 ? '🔥🔥🔥' : score >= 10 ? '🔥🔥' : '🔥' };
     }).sort((a,b) => b.hot_score - a.hot_score);
     res.json(trending);
