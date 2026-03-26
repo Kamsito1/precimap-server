@@ -324,6 +324,40 @@ const SAVING_TIPS = [
   { id:18, emoji:'🛍️', title:'Cesta básica en Aldi + frescos en mercado', desc:'Aldi para secos/lácteos y mercado local para fruta y verdura: ahorro de hasta un 35% vs comprar todo en Mercadona.', category:'super', saves:'~50€/mes' },
 ];
 
+// Price benchmarks per category — national averages for reference
+app.get('/api/price-benchmarks', async (req, res) => {
+  try {
+    const { city } = req.query;
+    let q = supabase.from('prices')
+      .select('price, places!inner(category, city)')
+      .eq('is_active', 1)
+      .in('places.category', ['restaurante','farmacia','supermercado'])
+      .gte('price', 0.5);
+    if (city) q = q.ilike('places.city', `%${city}%`);
+    const { data } = await q.limit(2000);
+    const buckets = {};
+    (data||[]).forEach(r => {
+      const cat = r.places?.category;
+      if (!cat) return;
+      if (!buckets[cat]) buckets[cat] = [];
+      buckets[cat].push(r.price);
+    });
+    const result = {};
+    Object.entries(buckets).forEach(([cat, prices]) => {
+      prices.sort((a,b)=>a-b);
+      const n = prices.length;
+      result[cat] = {
+        count: n,
+        min: prices[0],
+        max: prices[n-1],
+        avg: prices.reduce((a,b)=>a+b,0)/n,
+        median: prices[Math.floor(n/2)],
+      };
+    });
+    res.json({ benchmarks: result, city: city||'España', count: (data||[]).length });
+  } catch(e) { res.json({ benchmarks: {}, city: 'España', count: 0 }); }
+});
+
 app.get('/api/tips', (req, res) => {
   const { category } = req.query;
   const tips = category ? SAVING_TIPS.filter(t => t.category === category) : SAVING_TIPS;
