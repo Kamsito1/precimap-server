@@ -237,7 +237,11 @@ app.get('/api/stats', async (req, res) => {
       db.count('places'), db.count('prices'), db.count('deals'),
       db.count('users'),  db.count('events'),
     ]);
-    res.json({ places, prices, deals, users, events });
+    res.json({
+      places, prices, deals, users, events,
+      gasolineras: _gasCache?.length || 0,
+      version: '3.3.0',
+    });
   } catch(e) { fail(res, e.message, 500); }
 });
 
