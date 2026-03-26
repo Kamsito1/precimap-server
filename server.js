@@ -584,6 +584,7 @@ app.get('/api/deals', optAuth, async (req, res) => {
     // Re-sort by hot_score if 'hot'
     if (sort === 'hot') deals.sort((a,b) => b.hot_score - a.hot_score);
 
+    res.set('X-Total-Count', deals.length);
     res.json(deals);
   } catch(e) { fail(res, e.message, 500); }
 });
