@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>PreciMap — El mapa de los precios reales</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗺️</text></svg>">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-left"><span class="logo">🗺️ PreciMap</span></div>
+    <div class="header-center" id="search-bar">
+      <input type="text" id="search-input" placeholder="Buscar lugar..." autocomplete="off">
+    </div>
+    <div class="header-right">
+      <button class="btn-notif" id="btn-notif">
+        <span>🔔</span><span class="notif-badge" id="notif-badge" style="display:none">0</span>
+      </button>
+      <button class="btn-user" id="btn-user"><span id="user-avatar">👤</span></button>
+    </div>
+  </header>
+
+  <div class="cat-filters" id="cat-filters">
+    <button class="cat-btn active" data-cat="all">🏙️ Todo</button>
+    <button class="cat-btn" data-cat="gasolinera">⛽ Gasolina</button>
+    <button class="cat-btn" data-cat="supermercado">🛒 Súper</button>
+    <button class="cat-btn" data-cat="bar">🍺 Bares</button>
+    <button class="cat-btn" data-cat="cafe">☕ Cafés</button>
+    <button class="cat-btn" data-cat="farmacia">💊 Farmacias</button>
+    <button class="cat-btn" data-cat="restaurante">🍕 Restaurantes</button>
+    <button class="cat-btn" data-cat="parking">🅿️ Parking</button>
+  </div>
+
+  <div class="tab-content">
+    <section class="tab-section active" id="tab-mapa">
+      <div class="view-toolbar" id="view-toolbar">
+        <div class="view-toggle">
+          <button class="view-btn active" id="btn-map-view" onclick="switchView('map')">🗺️ Mapa</button>
+          <button class="view-btn" id="btn-list-view" onclick="switchView('list')">☰ Lista</button>
+        </div>
+        <div class="sort-controls" id="sort-controls" style="display:none">
+          <select id="list-sort" onchange="renderListView()">
+            <option value="proximity">📍 Más cercano</option>
+            <option value="price_asc">💰 Precio ↑</option>
+            <option value="price_desc">💰 Precio ↓</option>
+            <option value="verified">✅ Verificados</option>
+          </select>
+        </div>
+        <div class="radius-inline" id="radius-inline">
+          <span class="radius-label-sm">📍 <span id="radius-val">5</span>km</span>
+          <input type="range" id="radius-slider" min="1" max="50" value="5" step="1">
+        </div>
+      </div>
+      <div id="map-view-container">
+        <div id="map"></div>
+        <button class="fab" id="btn-add-place" title="Añadir lugar">+</button>
+      </div>
+      <div id="list-view-container" style="display:none">
+        <div id="places-list" class="places-list"><div class="loading-state">Cargando...</div></div>
+        <button class="fab" onclick="document.getElementById('btn-add-place').click()">+</button>
+      </div>
+    </section>
+
+    <section class="tab-section" id="tab-chollos">
+      <div class="deals-header">
+        <div class="deals-filters">
+          <button class="deal-filter active" data-cat="all">🔥 Todo</button>
+          <button class="deal-filter" data-cat="tecnologia">💻 Tech</button>
+          <button class="deal-filter" data-cat="ropa">👗 Moda</button>
+          <button class="deal-filter" data-cat="hogar">🏠 Hogar</button>
+          <button class="deal-filter" data-cat="alimentacion">🍎 Alimentación</button>
+          <button class="deal-filter" data-cat="otros">📦 Otros</button>
+        </div>
+        <div class="deals-sort">
+          <select id="deals-sort">
+            <option value="hot">🔥 Más calientes</option>
+            <option value="new">🆕 Más nuevos</option>
+            <option value="discount">💯 Mayor descuento</option>
+          </select>
+          <button class="btn-submit-deal" id="btn-submit-deal">+ Añadir chollo</button>
+        </div>
+      </div>
+      <div class="deals-grid" id="deals-grid"><div class="loading-state">Cargando chollos...</div></div>
+    </section>
+
+    <section class="tab-section" id="tab-ranking">
+      <div class="ranking-header">
+        <h2>🏆 Ranking de ahorradores</h2>
+        <div class="period-tabs">
+          <button class="period-btn active" data-period="month">Mes</button>
+          <button class="period-btn" data-period="week">Semana</button>
+          <button class="period-btn" data-period="all">Total</button>
+        </div>
+      </div>
+      <div class="leaderboard" id="leaderboard"><div class="loading-state">Cargando...</div></div>
+    </section>
+
+    <section class="tab-section" id="tab-perfil">
+      <div id="perfil-content">
+        <div class="profile-placeholder">
+          <div class="placeholder-icon">👤</div>
+          <p>Inicia sesión para ver tu perfil, puntos y logros</p>
+          <button class="btn-primary" onclick="openAuth()">Entrar / Registrarse</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-tab="mapa"><span>🗺️</span><span>Mapa</span></button>
+    <button class="nav-btn" data-tab="chollos"><span>⭐</span><span>Chollos</span></button>
+    <button class="nav-btn" data-tab="ranking"><span>🏆</span><span>Ranking</span></button>
+    <button class="nav-btn" data-tab="perfil"><span>👤</span><span>Perfil</span></button>
+  </nav>
+
+  <!-- PLACE PANEL -->
+  <div class="panel-overlay" id="place-overlay" onclick="closePanel()"></div>
+  <div class="side-panel" id="place-panel">
+    <div class="panel-handle"></div>
+    <div class="panel-content" id="place-panel-content"></div>
+  </div>
+
+  <!-- PRICE MODAL -->
+  <div class="modal-overlay" id="price-modal-overlay" onclick="closePriceModal()"></div>
+  <div class="modal" id="price-modal">
+    <div class="modal-header">
+      <h3 id="price-modal-title">Reportar precio</h3>
+      <button class="modal-close" onclick="closePriceModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Producto / Servicio</label>
+        <input type="text" id="pm-product" placeholder="Ej: Caña cerveza, Gasolina 95..." list="product-suggestions">
+        <datalist id="product-suggestions"></datalist>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Precio (€)</label>
+          <input type="number" id="pm-price" placeholder="1.50" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label>Unidad</label>
+          <select id="pm-unit">
+            <option value="unidad">Unidad</option>
+            <option value="litro">Litro</option>
+            <option value="kg">Kg</option>
+            <option value="pack">Pack</option>
+            <option value="ración">Ración</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Foto del ticket (opcional)</label>
+        <div class="photo-upload" id="photo-upload-zone">
+          <span>📷 Toca para añadir foto</span>
+          <input type="file" id="pm-photo" accept="image/*" capture="environment" style="position:absolute;opacity:0;inset:0;cursor:pointer">
+        </div>
+        <div id="photo-preview" style="display:none;align-items:center;gap:8px">
+          <img id="photo-preview-img" style="max-height:80px;border-radius:8px">
+          <button onclick="clearPhoto()" class="btn-text">✕ Quitar</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closePriceModal()">Cancelar</button>
+      <button class="btn-primary" id="btn-submit-price" onclick="submitPrice()">Publicar precio</button>
+    </div>
+  </div>
+
+  <!-- ADD PLACE MODAL -->
+  <div class="modal-overlay" id="place-modal-overlay" onclick="closePlaceModal()"></div>
+  <div class="modal" id="place-modal">
+    <div class="modal-header">
+      <h3>Añadir lugar</h3>
+      <button class="modal-close" onclick="closePlaceModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="info-banner">📍 El lugar se añadirá en el centro del mapa</div>
+      <div class="form-group">
+        <label>Nombre del lugar</label>
+        <input type="text" id="ap-name" placeholder="Ej: Bar El Rincón, Repsol A4...">
+      </div>
+      <div class="form-group">
+        <label>Categoría</label>
+        <div class="cat-grid">
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="gasolinera">⛽ Gasolinera</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="supermercado">🛒 Supermercado</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="bar">🍺 Bar</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="farmacia">💊 Farmacia</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="cafe">☕ Cafetería</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="restaurante">🍕 Restaurante</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="parking">🅿️ Parking</label>
+          <label class="cat-radio"><input type="radio" name="ap-cat" value="ev">🔌 Cargador EV</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Dirección (opcional)</label>
+        <input type="text" id="ap-address" placeholder="Calle, número, ciudad">
+      </div>
+      <div class="form-group">
+        <label>Horario (opcional)</label>
+        <input type="text" id="ap-hours" placeholder="Ej: L-V 9:00-21:00">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closePlaceModal()">Cancelar</button>
+      <button class="btn-primary" onclick="submitPlace()">Añadir lugar</button>
+    </div>
+  </div>
+
+  <!-- DEAL MODAL -->
+  <div class="modal-overlay" id="deal-modal-overlay" onclick="closeDealModal()"></div>
+  <div class="modal" id="deal-modal">
+    <div class="modal-header">
+      <h3>🔥 Compartir chollo</h3>
+      <button class="modal-close" onclick="closeDealModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Título del chollo *</label>
+        <input type="text" id="dm-title" placeholder="Ej: Auriculares Sony WH-1000XM5">
+      </div>
+      <div class="form-group">
+        <label>URL del producto</label>
+        <input type="url" id="dm-url" placeholder="https://amazon.es/...">
+        <small class="form-hint">🔗 Links de Amazon llevan automáticamente el tag de afiliado juanantonioex-21</small>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Precio oferta (€) *</label>
+          <input type="number" id="dm-price" placeholder="29.99" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Precio original (€)</label>
+          <input type="number" id="dm-original" placeholder="59.99" step="0.01">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tienda</label>
+          <input type="text" id="dm-store" placeholder="Amazon, Zara, Mercadona...">
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <select id="dm-cat">
+            <option value="tecnologia">💻 Tecnología</option>
+            <option value="ropa">👗 Moda</option>
+            <option value="hogar">🏠 Hogar</option>
+            <option value="alimentacion">🍎 Alimentación</option>
+            <option value="otros">📦 Otros</option>
+          </select>
+        </div>
+      </div>
+      <div id="ai-analysis-preview" style="display:none" class="ai-preview">
+        <div class="ai-badge">🤖 Análisis IA en curso...</div>
+        <div id="ai-preview-text"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeDealModal()">Cancelar</button>
+      <button class="btn-primary" id="btn-publish-deal" onclick="submitDeal()">Publicar chollo</button>
+    </div>
+  </div>
+
+  <!-- AUTH MODAL -->
+  <div class="modal-overlay" id="auth-modal-overlay" onclick="closeAuth()"></div>
+  <div class="modal" id="auth-modal">
+    <div class="modal-header">
+      <h3 id="auth-title">Iniciar sesión</h3>
+      <button class="modal-close" onclick="closeAuth()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="auth-name-group" class="form-group" style="display:none">
+        <label>Nombre</label><input type="text" id="auth-name" placeholder="Tu nombre">
+      </div>
+      <div class="form-group">
+        <label>Email</label><input type="email" id="auth-email" placeholder="tucorreo@email.com">
+      </div>
+      <div class="form-group">
+        <label>Contraseña</label><input type="password" id="auth-pass" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div id="auth-error" class="error-banner" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="auth-toggle-btn" onclick="toggleAuthMode()">¿No tienes cuenta? Regístrate</button>
+      <button class="btn-primary" onclick="submitAuth()">Entrar</button>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

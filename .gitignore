@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Environment variables — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Runtime
+pids/
+*.pid
+
+# Uploads (user content — too large for git)
+public/uploads/
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
