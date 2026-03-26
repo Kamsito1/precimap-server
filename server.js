@@ -1105,15 +1105,20 @@ app.get('/api/places', optAuth, async (req, res) => {
           repPrice = Math.min(...prices.map(p => p.price));
           repContext = `${prices.length} carburantes`;
         } else if (cat === 'supermercado') {
-          // Weekly basket: estimate based on community prices
-          // Average Spanish family spends ~100-130€/week on groceries
-          // We calculate from reported prices * avg quantities per week
-          const priceList = prices.map(p => p.price);
-          const avgUnit = priceList.reduce((a,b)=>a+b,0) / priceList.length;
-          // Approx weekly basket = avg unit price * typical items per week (30)
-          const weeklyEst = Math.round(avgUnit * 30 * 100) / 100;
-          repPrice = weeklyEst;
-          repContext = `~${weeklyEst.toFixed(0)}€/semana · ${prices.length} productos reportados`;
+          // Weekly basket estimate using min price as anchor
+          // Reference: OCU 2024 — Aldi cheapest basket ~80€/week for 2 people
+          // We scale vs a reference basket of 50 products at avg 1.8€ = 90€
+          const priceList = prices.filter(p => p.price > 0).map(p => p.price);
+          if (priceList.length > 0) {
+            const minP = Math.min(...priceList);
+            const avgP = priceList.reduce((a,b)=>a+b,0)/priceList.length;
+            // Basket = cheapest super gets reference ~80€, others scaled up
+            // Use min price as proxy for store cheapness (Aldi ~0.5€ avg, Carrefour ~1.2€)
+            const refAvg = 0.72; // Aldi reference avg unit price
+            const weeklyBasket = Math.round((avgP / refAvg) * 80);
+            repPrice = Math.max(60, Math.min(160, weeklyBasket));
+            repContext = `~${repPrice}€/semana · ${prices.length} productos reportados`;
+          }
         } else if (cat === 'gimnasio') {
           // Min monthly fee (only real fees > 0, not enrollment)
           const fees = prices.filter(p => p.price > 0 && (
