@@ -1105,18 +1105,16 @@ app.get('/api/places', optAuth, async (req, res) => {
           repPrice = Math.min(...prices.map(p => p.price));
           repContext = `${prices.length} carburantes`;
         } else if (cat === 'supermercado') {
-          // Weekly basket estimate using min price as anchor
-          // Reference: OCU 2024 — Aldi cheapest basket ~80€/week for 2 people
-          // We scale vs a reference basket of 50 products at avg 1.8€ = 90€
-          const priceList = prices.filter(p => p.price > 0).map(p => p.price);
+          // Weekly basket using median price (more robust vs outliers like olive oil)
+          const priceList = prices.filter(p => p.price > 0).map(p => p.price).sort((a,b)=>a-b);
           if (priceList.length > 0) {
-            const minP = Math.min(...priceList);
-            const avgP = priceList.reduce((a,b)=>a+b,0)/priceList.length;
-            // Basket = cheapest super gets reference ~80€, others scaled up
-            // Use min price as proxy for store cheapness (Aldi ~0.5€ avg, Carrefour ~1.2€)
-            const refAvg = 0.72; // Aldi reference avg unit price
-            const weeklyBasket = Math.round((avgP / refAvg) * 80);
-            repPrice = Math.max(60, Math.min(160, weeklyBasket));
+            // Median to avoid expensive outliers (olive oil, etc.) skewing result
+            const mid = Math.floor(priceList.length/2);
+            const medianP = priceList.length%2 ? priceList[mid] : (priceList[mid-1]+priceList[mid])/2;
+            // Scale: Aldi median ~0.65€, basket ~80€. Higher median = pricier store
+            const refMedian = 0.65;
+            const weeklyBasket = Math.round((medianP / refMedian) * 80);
+            repPrice = Math.max(60, Math.min(150, weeklyBasket));
             repContext = `~${repPrice}€/semana · ${prices.length} productos reportados`;
           }
         } else if (cat === 'gimnasio') {
