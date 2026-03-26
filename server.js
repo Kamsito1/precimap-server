@@ -1039,13 +1039,14 @@ app.get('/api/gasolineras', async (req, res) => {
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
 app.get('/api/events', async (req, res) => {
   try {
-    const { cat, sort='date', city, source, limit=50 } = req.query;
+    const { cat, sort='date', city, source, limit=50, search } = req.query;
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const currentHour = now.getHours();
     let q = supabase.from('events').select('*, users(id,name,avatar_url)').eq('is_active', 1).gte('date', today);
     if (cat && cat!=='all') q = q.eq('category', cat);
     if (source && source !== 'all') q = q.eq('source', source);
+    if (search) q = q.ilike('title', `%${search}%`);
     if (city) q = q.or(`city.ilike.%${city}%,address.ilike.%${city}%`);
     if (sort === 'price') q = q.order('price_from', { ascending: true, nullsFirst: false });
     else q = q.order('date', { ascending: true });
