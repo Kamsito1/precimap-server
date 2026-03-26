@@ -560,6 +560,8 @@ app.get('/api/deals', optAuth, async (req, res) => {
       q = q.order('detected_at', { ascending: false });
     else if (sort === 'top')
       q = q.order('votes_up', { ascending: false });
+    else if (sort === 'price')
+      q = q.order('deal_price', { ascending: true, nullsFirst: false });
 
     q = q.range(parseInt(offset), parseInt(offset)+parseInt(limit)-1);
     const { data, error } = await q;
@@ -685,6 +687,22 @@ app.post('/api/deals/:id/edit', auth, async (req, res) => {
 
 
 // ─── COMMENTS (threaded) ──────────────────────────────────────────────────────
+// Deal detail
+app.get('/api/deals/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return fail(res, 'Invalid id', 400);
+    const { data, error } = await supabase
+      .from('deals')
+      .select('*, users(id,name,avatar_url)')
+      .eq('id', id)
+      .eq('is_active', 1)
+      .single();
+    if (error || !data) return fail(res, 'Deal not found', 404);
+    res.json(data);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.get('/api/deals/:id/comments', async (req, res) => {
   try {
     const { data, error } = await supabase
