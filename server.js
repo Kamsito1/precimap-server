@@ -584,50 +584,54 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const { period = 'all' } = req.query;
-    // Period filter: compute since date
+    const BOT_EMAIL = 'bot@precimap.es';
+
+    // Get bot user ID to exclude from ranking
+    const { data: botUser } = await supabase.from('users').select('id').eq('email', BOT_EMAIL).single().catch(() => ({ data: null }));
+    const botId = botUser?.id || null;
+
     let sinceDate = null;
     if (period === 'week')  sinceDate = new Date(Date.now() - 7  * 86400000).toISOString();
     if (period === 'month') sinceDate = new Date(Date.now() - 30 * 86400000).toISOString();
 
     if (sinceDate) {
-      const { data: topReporters, error } = await supabase
-        .from('prices')
+      let q = supabase.from('prices')
         .select('reported_by, users(id, name, avatar_url, points, streak)')
         .gte('reported_at', sinceDate)
         .not('reported_by', 'is', null);
+      if (botId) q = q.neq('reported_by', botId);
+      const { data: topReporters, error } = await q;
       if (error) throw error;
       const counts = {};
       (topReporters || []).forEach(r => {
+        if (!r.users) return;
         const uid = r.reported_by;
         if (!counts[uid]) counts[uid] = { ...r.users, reports: 0 };
         counts[uid].reports++;
       });
       const sorted = Object.values(counts).sort((a,b) => b.reports - a.reports).slice(0, 30);
-      // If no activity in period, fall back to all-time points ranking
       if (sorted.length === 0) {
-        const { data: fallback } = await supabase
-          .from('users').select('id, name, avatar_url, points, streak, rank_title')
+        let fbQ = supabase.from('users').select('id, name, avatar_url, points, streak, rank_title')
           .eq('is_deleted', 0).order('points', { ascending: false }).limit(30);
+        if (botId) fbQ = fbQ.neq('id', botId);
+        const { data: fallback } = await fbQ;
         return res.json((fallback || []).map(u => ({ ...u, reports: 0, period_fallback: true })));
       }
       return res.json(sorted);
     }
 
-    // All time: rank by points, single query
-    const { data, error } = await supabase
-      .from('users')
+    // All time: rank by points, exclude bot
+    let q = supabase.from('users')
       .select('id, name, avatar_url, points, streak, rank_title')
       .eq('is_deleted', 0)
       .order('points', { ascending: false })
       .limit(30);
+    if (botId) q = q.neq('id', botId);
+    const { data, error } = await q;
     if (error) throw error;
 
-    // Get report counts in one query (not N+1)
     const userIds = (data || []).map(u => u.id);
-    const { data: reportCounts } = await supabase
-      .from('prices')
-      .select('reported_by')
-      .in('reported_by', userIds);
+    const { data: reportCounts } = await supabase.from('prices').select('reported_by').in('reported_by', userIds);
     const countMap = {};
     (reportCounts || []).forEach(r => { countMap[r.reported_by] = (countMap[r.reported_by] || 0) + 1; });
 
@@ -1597,7 +1601,7 @@ expireOldEvents();
 setInterval(expireOldEvents, 6 * 60 * 60 * 1000); // every 6h
 
 // ─── AMAZON SCRAPER — Cron job cada 6 horas ───────────────────────────────────
-const { runAmazonScraper } = require('./amazon_scraper');
+const { runAmazonScraper, verifyActiveBotDeals } = require('./amazon_scraper');
 
 // ID del usuario bot (PreciMap Bot) — si no existe lo creamos
 let BOT_USER_ID = process.env.BOT_USER_ID || null;
@@ -1628,6 +1632,9 @@ async function runScraperJob() {
   try {
     const botId = await ensureBotUser();
     if (!botId) { console.log('⚠️ No bot user ID, skipping scraper'); return; }
+    // 1. Verificar chollos existentes — eliminar los que ya no están de oferta
+    await verifyActiveBotDeals(supabase, botId);
+    // 2. Buscar nuevas ofertas
     const result = await runAmazonScraper(supabase, botId);
     console.log(`🤖 Scraper result:`, result);
   } catch(e) { console.error('Scraper job error:', e.message); }
@@ -1637,11 +1644,20 @@ async function runScraperJob() {
 setTimeout(runScraperJob, 30000);
 setInterval(runScraperJob, 6 * 60 * 60 * 1000);
 
-// Endpoint manual para admin — forzar scraper
+// Verificación de ofertas más frecuente — cada 3 horas
+setInterval(async () => {
+  try {
+    const botId = await ensureBotUser();
+    if (botId) await verifyActiveBotDeals(supabase, botId);
+  } catch(e) { console.error('Verify job error:', e.message); }
+}, 3 * 60 * 60 * 1000);
+
+// Endpoint manual para admin — forzar scraper o verificación
 app.post('/api/admin/run-scraper', auth, async (req, res) => {
   if (!req.user.is_admin) return fail(res, 'No autorizado', 403);
-  runScraperJob().catch(console.error);
-  res.json({ ok: true, message: 'Scraper lanzado en background' });
+  const { action = 'all' } = req.body;
+  runScraperJob().catch(console.error); // always run full job
+  res.json({ ok: true, message: `Scraper lanzado en background (action: ${action})` });
 });
 
 // ─── START ────────────────────────────────────────────────────────────────────

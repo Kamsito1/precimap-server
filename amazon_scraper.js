@@ -176,7 +176,91 @@ async function scrapeChollosRSS() {
   return results;
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+// ─── VERIFICAR OFERTAS ACTIVAS — Detecta cuando acaba el chollo ──────────────
+async function verifyActiveBotDeals(supabase, botUserId) {
+  console.log('🔍 Verificando ofertas activas del bot...');
+  try {
+    // Obtener todos los chollos activos del bot
+    const { data: activeDeals } = await supabase
+      .from('deals')
+      .select('id, title, url, deal_price, original_price, discount_percent, asin')
+      .eq('reported_by', botUserId)
+      .eq('is_active', 1)
+      .not('url', 'is', null);
+
+    if (!activeDeals?.length) { console.log('No hay chollos activos del bot'); return 0; }
+    console.log(`Verificando ${activeDeals.length} chollos activos...`);
+
+    let expired = 0;
+    for (const deal of activeDeals) {
+      try {
+        await sleep(2000 + Math.random() * 2000);
+        // Extraer ASIN si no lo tenemos guardado
+        const asin = deal.asin || extractAsin(deal.url);
+        if (!asin) continue;
+
+        // Verificar precio actual en Amazon España
+        const currentPrice = await checkAmazonCurrentPrice(asin);
+        if (currentPrice === null) continue; // error de red, no actuar
+
+        const originalPrice = deal.original_price || deal.deal_price * 1.3;
+        const stillOnSale = currentPrice <= deal.deal_price * 1.05; // tolerancia 5%
+        const priceTooHigh = currentPrice >= originalPrice * 0.95; // precio casi normal
+
+        if (!stillOnSale || priceTooHigh) {
+          // El chollo ya no está activo — desactivar
+          await supabase.from('deals').update({
+            is_active: 0,
+            expired_reason: `Precio actual: ${currentPrice}€ (oferta era ${deal.deal_price}€)`,
+            expired_at: new Date().toISOString(),
+          }).eq('id', deal.id);
+          console.log(`❌ Oferta expirada: "${deal.title.slice(0,50)}" — precio subió de ${deal.deal_price}€ a ${currentPrice}€`);
+          expired++;
+        } else {
+          console.log(`✅ Sigue activo: "${deal.title.slice(0,40)}" — ${currentPrice}€`);
+        }
+      } catch(e) { console.error('Error verificando deal', deal.id, e.message); }
+    }
+    console.log(`Verificación completada: ${expired} chollos expirados`);
+    return expired;
+  } catch(e) { console.error('verifyActiveBotDeals error:', e.message); return 0; }
+}
+
+// Comprueba el precio actual de un ASIN en Amazon.es
+async function checkAmazonCurrentPrice(asin) {
+  try {
+    const url = `https://www.amazon.es/dp/${asin}`;
+    await sleep(1000);
+    const res = await fetch(url, { headers: getHeaders(), timeout: 10000 });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const $ = cheerio.load(html);
+
+    // Multiple selectors para el precio actual
+    const priceSelectors = [
+      '.a-price.aok-align-center .a-offscreen',
+      '#priceblock_ourprice',
+      '#priceblock_dealprice',
+      '.a-price-whole',
+      '#corePrice_feature_div .a-price .a-offscreen',
+      '.priceToPay .a-offscreen',
+    ];
+
+    for (const sel of priceSelectors) {
+      const priceText = $(sel).first().text().trim().replace(/[€\s]/g, '').replace(',', '.');
+      const price = parseFloat(priceText);
+      if (price > 0 && price < 99999) return price;
+    }
+
+    // Verificar si el producto está disponible
+    const outOfStock = html.includes('actualmente no disponible') ||
+      html.includes('not available') ||
+      html.includes('temporalmente sin stock');
+    if (outOfStock) return 999999; // precio imposible = expirar
+
+    return null; // no pudimos obtener precio
+  } catch { return null; }
+}
 
 // ─── FUENTE 3: Amazon Outlet España ──────────────────────────────────────────
 async function scrapeAmazonOutlet() {
@@ -302,4 +386,6 @@ async function runAmazonScraper(supabase, botUserId) {
   return { found: all.length, unique: unique.length, saved };
 }
 
-module.exports = { runAmazonScraper, addAffiliateTag };
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+module.exports = { runAmazonScraper, verifyActiveBotDeals, addAffiliateTag };
