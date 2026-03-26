@@ -230,7 +230,7 @@ async function checkBadges(userId) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.2.1', db: 'supabase' }));
+app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.3.0', db: 'supabase', stations: _gasCache?.length || 0 }));
 app.get('/api/stats', async (req, res) => {
   try {
     const [places, prices, deals, users, events] = await Promise.all([
