@@ -302,10 +302,10 @@ app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.6.0', db: 
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
-  server: '3.5.3',
-  app: '1.0.2',
-  features: ['gasolineras-12213','chollos-50','eventos-30','usuarios-25','trending-deals','trending-events','search-global','tips-ahorro-8'],
-  updated: '2026-03-26',
+  server: '3.6.0',
+  app: '1.3.0',
+  features: ['gasolineras-12213','chollos-50','eventos-30','usuarios-33','trending-deals','trending-events','search-global','tips-ahorro-18','google-signin','admob','favorites-sync','deal-votes-sync','weekly-cost-supermarkets'],
+  updated: '2026-03-27',
 }));
 // ─── TIPS DE AHORRO ─────────────────────────────────────────────────────────
 const SAVING_TIPS = [
@@ -1877,7 +1877,7 @@ app.post('/api/admin/run-scraper', auth, async (req, res) => {
 
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🗺️  PreciMap v3.5.1 en http://localhost:${PORT}`);
+  console.log(`\n🗺️  PreciMap v3.6.0 en http://localhost:${PORT}`);
   console.log(`🔗 Amazon afiliado: ${process.env.AMAZON_AFFILIATE_TAG}`);
   console.log(`🤖 Scraper Amazon: activo cada 6h`);
   console.log(`🗄️  Base de datos: Supabase (${process.env.SUPABASE_URL ? '✅ Connected' : '❌ No URL'})\n`);
