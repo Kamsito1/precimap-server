@@ -1084,8 +1084,25 @@ app.get('/api/gasolineras', async (req, res) => {
 
 // ─── EVENTS ───────────────────────────────────────────────────────────────────
 // Trending events — top 5 most voted upcoming events
-app.get('/api/events/trending', async (req, res) => {
+// ─── BÚSQUEDA GLOBAL ─────────────────────────────────────────────────────────
+app.get('/api/search', async (req, res) => {
   try {
+    const { q } = req.query;
+    if (!q || q.trim().length < 2) return res.json({ deals:[], events:[], places:[] });
+    const term = `%${q.trim()}%`;
+    const [deals, events, places] = await Promise.all([
+      supabase.from('deals').select('id,title,deal_price,discount_percent,category,store')
+        .eq('is_active',1).ilike('title', term).limit(5),
+      supabase.from('events').select('id,title,date,city,is_free,category')
+        .eq('is_active',1).ilike('title', term).limit(5),
+      supabase.from('places').select('id,name,category,city')
+        .eq('is_active',1).ilike('name', term).limit(5),
+    ]);
+    res.json({ deals: deals.data||[], events: events.data||[], places: places.data||[], query: q });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.get('/api/events/trending', async (req, res) => {  try {
     const today = new Date().toISOString().split('T')[0];
     const { data, error } = await supabase.from('events')
       .select('id,title,category,date,city,is_free,price_from,votes_up')
