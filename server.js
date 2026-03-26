@@ -231,6 +231,14 @@ async function checkBadges(userId) {
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.4.0', db: 'supabase', stations: _gasCache?.length || 0 }));
+
+// Version + changelog
+app.get('/api/version', (req, res) => res.json({
+  server: '3.4.0',
+  app: '1.0.2',
+  features: ['gasolineras-12213','chollos-50','eventos-30','usuarios-25','trending-deals','trending-events','search-global','tips-ahorro-8'],
+  updated: '2026-03-26',
+}));
 // ─── TIPS DE AHORRO ─────────────────────────────────────────────────────────
 const SAVING_TIPS = [
   { id:1, emoji:'⛽', title:'G95 más barato a primera hora', desc:'Las gasolineras en autopistas son hasta 20cts más caras. Busca estaciones en poblaciones cercanas.', category:'gasolina', saves:'~18€/mes' },
