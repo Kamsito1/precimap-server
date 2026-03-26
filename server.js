@@ -595,8 +595,11 @@ app.get('/api/leaderboard', async (req, res) => {
     const BOT_EMAIL = 'bot@precimap.es';
 
     // Get bot user ID to exclude from ranking
-    const { data: botUser } = await supabase.from('users').select('id').eq('email', BOT_EMAIL).single().catch(() => ({ data: null }));
-    const botId = botUser?.id || null;
+    let botId = null;
+    try {
+      const { data: botUser } = await supabase.from('users').select('id').eq('email', BOT_EMAIL).single();
+      botId = botUser?.id || null;
+    } catch {}
 
     let sinceDate = null;
     if (period === 'week')  sinceDate = new Date(Date.now() - 7  * 86400000).toISOString();
