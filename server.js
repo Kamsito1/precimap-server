@@ -860,11 +860,13 @@ app.get('/api/deals', optAuth, async (req, res) => {
 app.get('/api/amazon/product', optAuth, async (req, res) => {
   const { url } = req.query;
   if (!url) return fail(res, 'URL requerida', 400);
-  const asin = extractAsin(url);
-  if (!asin) return fail(res, 'No se pudo extraer el ASIN de la URL', 400);
-  const product = await getAmazonProductInfo(asin);
-  if (!product) return fail(res, 'Producto no encontrado o error de API', 404);
-  res.json(product);
+  try {
+    const asin = extractAsin(url);
+    if (!asin) return fail(res, 'No se pudo extraer el ASIN de la URL', 400);
+    const product = await getAmazonProductInfo(asin);
+    if (!product) return fail(res, 'Producto no encontrado o error de API', 404);
+    res.json(product);
+  } catch(e) { fail(res, e.message || 'Error al consultar Amazon', 500); }
 });
 
 // ─── DEAL DUPLICATE CHECK ────────────────────────────────────────────────────
