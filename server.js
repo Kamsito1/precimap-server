@@ -543,7 +543,7 @@ app.get('/api/leaderboard', async (req, res) => {
       // If no activity in period, fall back to all-time points ranking
       if (sorted.length === 0) {
         const { data: fallback } = await supabase
-          .from('users').select('id, name, avatar_url, points, streak')
+          .from('users').select('id, name, avatar_url, points, streak, rank_title')
           .eq('is_deleted', 0).order('points', { ascending: false }).limit(30);
         return res.json((fallback || []).map(u => ({ ...u, reports: 0, period_fallback: true })));
       }
@@ -553,7 +553,7 @@ app.get('/api/leaderboard', async (req, res) => {
     // All time: rank by points, single query
     const { data, error } = await supabase
       .from('users')
-      .select('id, name, avatar_url, points, streak')
+      .select('id, name, avatar_url, points, streak, rank_title')
       .eq('is_deleted', 0)
       .order('points', { ascending: false })
       .limit(30);
