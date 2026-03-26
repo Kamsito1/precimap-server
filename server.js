@@ -241,14 +241,18 @@ app.get('/api/version', (req, res) => res.json({
 }));
 // ─── TIPS DE AHORRO ─────────────────────────────────────────────────────────
 const SAVING_TIPS = [
-  { id:1, emoji:'⛽', title:'G95 más barato a primera hora', desc:'Las gasolineras en autopistas son hasta 20cts más caras. Busca estaciones en poblaciones cercanas.', category:'gasolina', saves:'~18€/mes' },
-  { id:2, emoji:'🛒', title:'Compra en Aldi o Lidl los básicos', desc:'El ahorro vs Mercadona en arroz, leche y pasta puede ser del 40%. La calidad es similar según OCU.', category:'super', saves:'~45€/mes' },
-  { id:3, emoji:'💳', title:'Cuenta Revolut para compras en el extranjero', desc:'Sin comisiones en divisas hasta 1.000€/mes. Ideal para viajes o compras en Amazon UK/DE.', category:'bancos', saves:'~12€/viaje' },
-  { id:4, emoji:'🏦', title:'Depósito Trade Republic al 3.62% TAE', desc:'Tu dinero no invertido debería estar generando intereses. Trade Republic da 3.62% sin condiciones.', category:'bancos', saves:'~181€/año por 5000€' },
-  { id:5, emoji:'🔥', title:'Activa alertas de precio en Amazon', desc:'Con Camelcamelcamel puedes ver el histórico de precios y recibir alertas cuando baje el producto que quieres.', category:'tech', saves:'Variable' },
-  { id:6, emoji:'🚗', title:'Gasolina: evita autopistas y aeropuertos', desc:'Las gasolineras en áreas de servicio de autopista pueden ser 15-25cts más caras que las de pueblo.', category:'gasolina', saves:'~25€/mes' },
-  { id:7, emoji:'💡', title:'Tarifa nocturna de luz: ahorra 30%', desc:'Si tienes contador inteligente, programar lavadora y lavavajillas de noche (23h-8h) puede ahorrarte un 30% en electricidad.', category:'hogar', saves:'~20€/mes' },
-  { id:8, emoji:'✈️', title:'Vuelos baratos: martes y miércoles', desc:'Las aerolíneas lanzan sus ofertas los lunes. Los martes y miércoles suelen ser los días más baratos para volar.', category:'viajes', saves:'~40% vs fin de semana' },
+  { id:1,  emoji:'⛽', title:'G95 más barato a primera hora',        desc:'Las gasolineras en autopistas son hasta 20cts más caras. Busca estaciones en poblaciones cercanas.', category:'gasolina', saves:'~18€/mes' },
+  { id:2,  emoji:'🛒', title:'Compra en Aldi o Lidl los básicos',    desc:'El ahorro vs Mercadona en arroz, leche y pasta puede ser del 40%. La calidad es similar según OCU.', category:'super', saves:'~45€/mes' },
+  { id:3,  emoji:'💳', title:'Revolut para compras en extranjero',    desc:'Sin comisiones en divisas hasta 1.000€/mes. Ideal para viajes o compras en Amazon UK/DE.', category:'bancos', saves:'~12€/viaje' },
+  { id:4,  emoji:'🏦', title:'Trade Republic al 4% sobre efectivo',  desc:'Tu dinero no invertido debería estar generando intereses. Sin condiciones ni límite de importe.', category:'bancos', saves:'~200€/año por 5000€' },
+  { id:5,  emoji:'🔥', title:'Alertas de precio con CamelCamelCamel',desc:'Historial de precios en Amazon. Pon una alerta y compra solo cuando baje al mínimo histórico.', category:'tech', saves:'Variable' },
+  { id:6,  emoji:'🚗', title:'Gasolina: evita autopistas',           desc:'Las gasolineras de autopista son hasta 25cts más caras. Sal una salida antes y repostan más barato.', category:'gasolina', saves:'~25€/mes' },
+  { id:7,  emoji:'💡', title:'Tarifa nocturna de luz: ahorra 30%',   desc:'Con discriminación horaria, programar lavadora y lavavajillas de noche (23h-8h) ahorra un 30%.', category:'hogar', saves:'~20€/mes' },
+  { id:8,  emoji:'✈️', title:'Vuelos baratos: martes y miércoles',   desc:'Las aerolíneas lanzan ofertas los lunes. Martes y miércoles son los días más baratos para volar.', category:'viajes', saves:'~40% vs fin de semana' },
+  { id:9,  emoji:'📱', title:'Apps de cashback: Mcupon y Tipealo',   desc:'Puedes obtener hasta un 3-5% de cashback en supermercados y tiendas con estas apps gratuitas.', category:'super', saves:'~15€/mes' },
+  { id:10, emoji:'🏷️', title:'Compra marca blanca en Mercadona',     desc:'La marca Hacendado supera a marcas comerciales en muchos tests de cata ciega. Ahorra un 30%.', category:'super', saves:'~30€/mes' },
+  { id:11, emoji:'📊', title:'Comparador de luz y gas OCU',          desc:'Cambiar de comercializadora de luz puede ahorrarte hasta 200€ al año. Usa el comparador de OCU.', category:'hogar', saves:'~200€/año' },
+  { id:12, emoji:'🎫', title:'Tarjeta Lidl Plus para descuentos',    desc:'La app gratuita de Lidl Plus ofrece descuentos semanales exclusivos y cupones personalizados.', category:'super', saves:'~10€/semana' },
 ];
 
 app.get('/api/tips', (req, res) => {
