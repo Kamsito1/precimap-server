@@ -231,8 +231,25 @@ async function checkBadges(userId) {
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.4.0', db: 'supabase', stations: _gasCache?.length || 0 }));
-app.get('/api/stats', async (req, res) => {
-  try {
+// ─── TIPS DE AHORRO ─────────────────────────────────────────────────────────
+const SAVING_TIPS = [
+  { id:1, emoji:'⛽', title:'G95 más barato a primera hora', desc:'Las gasolineras en autopistas son hasta 20cts más caras. Busca estaciones en poblaciones cercanas.', category:'gasolina', saves:'~18€/mes' },
+  { id:2, emoji:'🛒', title:'Compra en Aldi o Lidl los básicos', desc:'El ahorro vs Mercadona en arroz, leche y pasta puede ser del 40%. La calidad es similar según OCU.', category:'super', saves:'~45€/mes' },
+  { id:3, emoji:'💳', title:'Cuenta Revolut para compras en el extranjero', desc:'Sin comisiones en divisas hasta 1.000€/mes. Ideal para viajes o compras en Amazon UK/DE.', category:'bancos', saves:'~12€/viaje' },
+  { id:4, emoji:'🏦', title:'Depósito Trade Republic al 3.62% TAE', desc:'Tu dinero no invertido debería estar generando intereses. Trade Republic da 3.62% sin condiciones.', category:'bancos', saves:'~181€/año por 5000€' },
+  { id:5, emoji:'🔥', title:'Activa alertas de precio en Amazon', desc:'Con Camelcamelcamel puedes ver el histórico de precios y recibir alertas cuando baje el producto que quieres.', category:'tech', saves:'Variable' },
+  { id:6, emoji:'🚗', title:'Gasolina: evita autopistas y aeropuertos', desc:'Las gasolineras en áreas de servicio de autopista pueden ser 15-25cts más caras que las de pueblo.', category:'gasolina', saves:'~25€/mes' },
+  { id:7, emoji:'💡', title:'Tarifa nocturna de luz: ahorra 30%', desc:'Si tienes contador inteligente, programar lavadora y lavavajillas de noche (23h-8h) puede ahorrarte un 30% en electricidad.', category:'hogar', saves:'~20€/mes' },
+  { id:8, emoji:'✈️', title:'Vuelos baratos: martes y miércoles', desc:'Las aerolíneas lanzan sus ofertas los lunes. Los martes y miércoles suelen ser los días más baratos para volar.', category:'viajes', saves:'~40% vs fin de semana' },
+];
+
+app.get('/api/tips', (req, res) => {
+  const { category } = req.query;
+  const tips = category ? SAVING_TIPS.filter(t => t.category === category) : SAVING_TIPS;
+  res.json(tips);
+});
+
+app.get('/api/stats', async (req, res) => {  try {
     const [places, prices, deals, users, events, priceHistory] = await Promise.all([
       db.count('places'), db.count('prices'), db.count('deals'),
       db.count('users'),  db.count('events'), db.count('price_history'),
