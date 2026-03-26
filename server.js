@@ -755,6 +755,30 @@ app.get('/api/cities', async (req, res) => {
 });
 
 
+// Price history for a place
+app.get('/api/places/:id/price-history', async (req, res) => {
+  try {
+    const placeId = parseInt(req.params.id);
+    if (!placeId) return fail(res, 'Invalid place id', 400);
+    const { product, limit = 30 } = req.query;
+    let q = supabase.from('price_history')
+      .select('*')
+      .eq('place_id', placeId)
+      .order('reported_at', { ascending: true })
+      .limit(parseInt(limit));
+    if (product) q = q.eq('product', product);
+    const { data, error } = await q;
+    if (error) throw error;
+    // Group by product
+    const byProduct = {};
+    (data||[]).forEach(r => {
+      if (!byProduct[r.product]) byProduct[r.product] = [];
+      byProduct[r.product].push({ date: r.reported_at?.split('T')[0], price: r.price });
+    });
+    res.json({ place_id: placeId, history: byProduct, total: data?.length || 0 });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.get('/api/places', optAuth, async (req, res) => {
   try {
     const { cat, lat, lng, radius, city, product, sort='proximity' } = req.query;
