@@ -233,14 +233,23 @@ async function checkBadges(userId) {
 app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.4.0', db: 'supabase', stations: _gasCache?.length || 0 }));
 app.get('/api/stats', async (req, res) => {
   try {
-    const [places, prices, deals, users, events] = await Promise.all([
+    const [places, prices, deals, users, events, priceHistory] = await Promise.all([
       db.count('places'), db.count('prices'), db.count('deals'),
-      db.count('users'),  db.count('events'),
+      db.count('users'),  db.count('events'), db.count('price_history'),
     ]);
+    // Gas price stats from cache
+    const gasStats = {};
+    if (_gasCache?.length) {
+      ['g95','g98','diesel','dieselPlus','glp','gnc'].forEach(fuel => {
+        const vals = _gasCache.map(s => s.prices?.[fuel]).filter(v => v && v > 0);
+        if (vals.length) gasStats[fuel] = { min: Math.min(...vals), avg: vals.reduce((a,b)=>a+b,0)/vals.length, max: Math.max(...vals) };
+      });
+    }
     res.json({
-      places, prices, deals, users, events,
+      places, prices, deals, users, events, price_history: priceHistory,
       gasolineras: _gasCache?.length || 0,
-      version: '3.3.0',
+      gas_stats: gasStats,
+      version: '3.4.0',
     });
   } catch(e) { fail(res, e.message, 500); }
 });
