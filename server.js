@@ -58,7 +58,7 @@ app.use('/public', express.static(path.join(__dirname, 'public')));
 
 // Privacy & Terms pages (Apple requires accessible URL)
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public/privacy.html')));
-app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public/privacy.html')));
+app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public/terms.html')));
 
 // Note: apiLimiter applied after its declaration below
 
