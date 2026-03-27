@@ -1812,57 +1812,19 @@ async function expireOldEvents() {
 expireOldEvents();
 setInterval(expireOldEvents, 6 * 60 * 60 * 1000); // every 6h
 
-// ─── AMAZON SCRAPER — Cron job cada 6 horas ───────────────────────────────────
-const { runAmazonScraper, verifyActiveBotDeals } = require('./amazon_scraper');
+// ─── AMAZON SCRAPER — DESHABILITADO ──────────────────────────────────────────
+// Los chollos los añaden los usuarios directamente desde la app.
+// El scraper automático está desactivado para evitar contenido desactualizado.
+// const { runAmazonScraper, verifyActiveBotDeals } = require('./amazon_scraper');
+console.log('ℹ️  Scraper automático desactivado — chollos manuales de usuarios');
 
 // ID del usuario bot (PreciMap Bot) — si no existe lo creamos
 let BOT_USER_ID = process.env.BOT_USER_ID || null;
 
-async function ensureBotUser() {
-  try {
-    if (BOT_USER_ID) return BOT_USER_ID;
-    // Check if bot user exists
-    const { data: existing } = await supabase.from('users')
-      .select('id').eq('email', 'bot@precimap.es').single();
-    if (existing) { BOT_USER_ID = existing.id; return BOT_USER_ID; }
-    // Create bot user
-    const hashed = await bcrypt.hash('bot_' + Date.now(), 10);
-    const { data: newUser } = await supabase.from('users').insert({
-      name: 'PreciMap Bot 🤖',
-      email: 'bot@precimap.es',
-      password_hash: hashed,
-      is_active: 1,
-      is_admin: 0,
-      points: 0,
-    }).select('id').single();
-    if (newUser) { BOT_USER_ID = newUser.id; console.log('✅ Bot user created:', BOT_USER_ID); }
-    return BOT_USER_ID;
-  } catch(e) { console.error('Bot user error:', e.message); return null; }
-}
-
-async function runScraperJob() {
-  try {
-    const botId = await ensureBotUser();
-    if (!botId) { console.log('⚠️ No bot user ID, skipping scraper'); return; }
-    // 1. Verificar chollos existentes — eliminar los que ya no están de oferta
-    await verifyActiveBotDeals(supabase, botId);
-    // 2. Buscar nuevas ofertas
-    const result = await runAmazonScraper(supabase, botId);
-    console.log(`🤖 Scraper result:`, result);
-  } catch(e) { console.error('Scraper job error:', e.message); }
-}
-
-// Run after 2min startup delay (after healthcheck passes), then every 6 hours
-setTimeout(runScraperJob, 120000);
-setInterval(runScraperJob, 6 * 60 * 60 * 1000);
-
-// Verificación de ofertas más frecuente — cada 3 horas
-setInterval(async () => {
-  try {
-    const botId = await ensureBotUser();
-    if (botId) await verifyActiveBotDeals(supabase, botId);
-  } catch(e) { console.error('Verify job error:', e.message); }
-}, 3 * 60 * 60 * 1000);
+// Scraper deshabilitado — función vacía para no romper referencias
+async function ensureBotUser() { return null; }
+async function runScraperJob() { /* scraper deshabilitado */ }
+// setInterval y setTimeout eliminados — scraper off
 
 // Endpoint manual para admin — forzar scraper o verificación
 // Admin: re-award badges to all users (retroactive)
