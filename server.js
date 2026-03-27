@@ -759,7 +759,9 @@ app.get('/api/leaderboard', async (req, res) => {
         if (!counts[uid]) counts[uid] = { ...r.users, reports: 0 };
         counts[uid].reports++;
       });
-      const sorted = Object.values(counts).sort((a,b) => b.reports - a.reports).slice(0, 30);
+      const sorted = Object.values(counts)
+        .sort((a,b) => (b.reports !== a.reports) ? b.reports - a.reports : (b.points||0) - (a.points||0))
+        .slice(0, 30);
       if (sorted.length === 0) {
         let fbQ = supabase.from('users').select('id, name, avatar_url, points, streak, rank_title')
           .eq('is_deleted', 0).order('points', { ascending: false }).limit(30);
@@ -767,6 +769,7 @@ app.get('/api/leaderboard', async (req, res) => {
         const { data: fallback } = await fbQ;
         return res.json((fallback || []).map(u => ({ ...u, reports: 0, period_fallback: true })));
       }
+      // Add missing users who have points but 0 reports this period (to fill ranking)
       return res.json(sorted);
     }
 
