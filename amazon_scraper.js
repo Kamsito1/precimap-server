@@ -199,23 +199,29 @@ async function verifyActiveBotDeals(supabase, botUserId) {
         const asin = extractAsin(deal.url);
         if (!asin) continue;
 
-        // Verificar precio actual en Amazon España
-        const currentPrice = await checkAmazonCurrentPrice(asin);
-        if (currentPrice === null) continue; // error de red, no actuar
+        // Verificar precio actual en Amazon España (también obtiene imagen y título)
+        const product = await checkAmazonProduct(asin);
+        if (!product || product.price === null) continue; // error de red, no actuar
+        const currentPrice = product.price;
 
         const originalPrice = deal.original_price || deal.deal_price * 1.3;
         const stillOnSale = currentPrice <= deal.deal_price * 1.05; // tolerancia 5%
         const priceTooHigh = currentPrice >= originalPrice * 0.95; // precio casi normal
 
         if (!stillOnSale || priceTooHigh) {
-          // El chollo ya no está activo — desactivar
-          await supabase.from('deals').update({
-            is_active: 0,
-          }).eq('id', deal.id);
-          console.log(`❌ Oferta expirada: "${deal.title.slice(0,50)}" — precio subió de ${deal.deal_price}€ a ${currentPrice}€`);
+          await supabase.from('deals').update({ is_active: 0 }).eq('id', deal.id);
+          console.log(`❌ Expirado: "${deal.title.slice(0,50)}" — ${deal.deal_price}€ → ${currentPrice}€`);
           expired++;
         } else {
-          console.log(`✅ Sigue activo: "${deal.title.slice(0,40)}" — ${currentPrice}€`);
+          // Actualizar imagen si no la tenía
+          const updates = {};
+          if (!deal.image_url && product.image_url) updates.image_url = product.image_url;
+          if (Object.keys(updates).length > 0) {
+            await supabase.from('deals').update(updates).eq('id', deal.id);
+            console.log(`📷 Imagen añadida a: "${deal.title.slice(0,40)}"`);
+          } else {
+            console.log(`✅ Activo: "${deal.title.slice(0,40)}" — ${currentPrice}€`);
+          }
         }
       } catch(e) { console.error('Error verificando deal', deal.id, e.message); }
     }
@@ -225,7 +231,8 @@ async function verifyActiveBotDeals(supabase, botUserId) {
 }
 
 // Comprueba el precio actual de un ASIN en Amazon.es
-async function checkAmazonCurrentPrice(asin) {
+// Returns { price, image_url, title } — or null on error
+async function checkAmazonProduct(asin) {
   try {
     const url = `https://www.amazon.es/dp/${asin}`;
     await sleep(1000);
@@ -234,7 +241,7 @@ async function checkAmazonCurrentPrice(asin) {
     const html = await res.text();
     const $ = cheerio.load(html);
 
-    // Multiple selectors para el precio actual
+    // Extract price
     const priceSelectors = [
       '.a-price.aok-align-center .a-offscreen',
       '#priceblock_ourprice',
@@ -243,21 +250,37 @@ async function checkAmazonCurrentPrice(asin) {
       '#corePrice_feature_div .a-price .a-offscreen',
       '.priceToPay .a-offscreen',
     ];
-
+    let price = null;
     for (const sel of priceSelectors) {
       const priceText = $(sel).first().text().trim().replace(/[€\s]/g, '').replace(',', '.');
-      const price = parseFloat(priceText);
-      if (price > 0 && price < 99999) return price;
+      const p = parseFloat(priceText);
+      if (p > 0 && p < 99999) { price = p; break; }
     }
 
-    // Verificar si el producto está disponible
-    const outOfStock = html.includes('actualmente no disponible') ||
-      html.includes('not available') ||
-      html.includes('temporalmente sin stock');
-    if (outOfStock) return 999999; // precio imposible = expirar
+    // Extract main image
+    const image_url =
+      $('#landingImage').attr('src') ||
+      $('#imgTagWrapperId img').attr('src') ||
+      $('#main-image-container img').attr('src') ||
+      $('img#imgBlkFront').attr('src') ||
+      null;
 
-    return null; // no pudimos obtener precio
-  } catch { return null; }
+    // Extract title
+    const title = $('#productTitle').text().trim().slice(0, 200) || null;
+
+    // Out of stock = expire
+    const outOfStock = html.includes('actualmente no disponible') ||
+      html.includes('not available') || html.includes('temporalmente sin stock');
+    if (outOfStock) return { price: 999999, image_url, title };
+
+    return { price, image_url, title };
+  } catch(_) { return null; }
+}
+
+// Legacy wrapper — returns just price
+async function checkAmazonCurrentPrice(asin) {
+  const result = await checkAmazonProduct(asin);
+  return result?.price ?? null;
 }
 
 // ─── FUENTE 3: Amazon Outlet España ──────────────────────────────────────────
@@ -342,24 +365,26 @@ async function scrapeCuratedAsins() {
   for (const asin of CURATED_ASINS) {
     try {
       await sleep(1500 + Math.random() * 1000);
-      const price = await checkAmazonCurrentPrice(asin);
-      if (!price || price <= 0) continue;
+      // Single fetch for price + image + title
+      const product = await checkAmazonProduct(asin);
+      if (!product || !product.price || product.price <= 0 || product.price >= 999999) continue;
 
+      const { price, image_url: imgSrc, title: rawTitle } = product;
       const url = `https://www.amazon.es/dp/${asin}`;
-      const res = await fetch(url, { headers: getHeaders(), timeout: 12000 });
-      if (!res.ok) continue;
-      const html = await res.text();
-      const $ = cheerio.load(html);
 
-      const title = $('#productTitle').text().trim() || $('h1').first().text().trim();
-      if (!title) continue;
+      // Get original/discount if not in product
+      const res = await fetch(url, { headers: getHeaders(), timeout: 12000 }).catch(() => null);
+      let original = null, disc = null;
+      if (res?.ok) {
+        const html = await res.text();
+        const $ = cheerio.load(html);
+        const strikeEl = $('.a-text-price .a-offscreen').first().text().replace(/[€\s]/g,'').replace(',','.');
+        original = parseFloat(strikeEl) || null;
+        disc = original && original > price ? Math.round((1 - price/original) * 100) : null;
+      }
+      if (disc && disc < 15) continue;
 
-      const strikeEl = $('.a-text-price .a-offscreen').first().text().replace(/[€\s]/g,'').replace(',','.');
-      const original = parseFloat(strikeEl) || null;
-      const disc = original && original > price ? Math.round((1 - price/original) * 100) : null;
-      if (disc && disc < 15) continue; // at least 15% off
-
-      const imgSrc = $('#imgTagWrapperId img, #landingImage').attr('src') || null;
+      const title = rawTitle || `Oferta Amazon ${asin}`;
 
       results.push({
         title: title.slice(0, 200),
@@ -367,13 +392,13 @@ async function scrapeCuratedAsins() {
         deal_price: price,
         original_price: original,
         discount_percent: disc,
-        image_url: imgSrc,
+        image_url: imgSrc || null,
         store: 'Amazon',
         category: detectCategory(title),
         source: 'curated',
         asin,
       });
-    } catch(e) { /* skip */ }
+    } catch(_) { /* skip */ }
   }
   return results;
 }
@@ -416,10 +441,20 @@ async function runAmazonScraper(supabase, botUserId) {
       let existing = null;
       if (deal.asin) {
         const { data } = await supabase.from('deals')
-          .select('id').ilike('url', `%${deal.asin}%`).eq('is_active', 1).limit(1);
+          .select('id, image_url').ilike('url', `%${deal.asin}%`).eq('is_active', 1).limit(1);
         existing = data?.[0];
       }
-      if (existing) continue; // skip duplicates
+      if (existing) {
+        // Update image if we now have one and it was missing
+        if (deal.image_url && existing.id) {
+          const { data: ex } = await supabase.from('deals').select('image_url').eq('id', existing.id).single().catch(() => ({ data: null }));
+          if (ex && !ex.image_url) {
+            await supabase.from('deals').update({ image_url: deal.image_url }).eq('id', existing.id);
+            console.log(`📷 Imagen actualizada para deal id:${existing.id}`);
+          }
+        }
+        continue; // skip duplicate insert
+      }
 
       // Insert deal with bot user
       const expires = new Date(Date.now() + 7 * 24 * 3600000).toISOString(); // 7 días
