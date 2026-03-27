@@ -1205,8 +1205,17 @@ app.get('/api/places', optAuth, async (req, res) => {
     });
     const result = list.map(place => {
       let prices = (pricesByPlace[place.id] || []).slice(0, 10);
-      if (product) prices = prices.filter(p => fuzzyMatch(product, p.product));
-      if (product && prices.length === 0) return null;
+      let productPrices = product ? prices.filter(p => fuzzyMatch(product, p.product)) : prices;
+      // Para restaurantes: mostrar siempre el lugar aunque no tenga el precio específico,
+      // usar product solo para calcular repPrice. Para otras categorías: filtrar estrictamente.
+      if (product && productPrices.length === 0) {
+        if (place.category === 'restaurante') {
+          productPrices = prices; // fallback: usar todos sus precios
+        } else {
+          return null; // farmacia sin ese medicamento → excluir
+        }
+      }
+      prices = productPrices;
 
       // Compute representative price based on category:
       let repPrice = null;
@@ -1240,11 +1249,20 @@ app.get('/api/places', optAuth, async (req, res) => {
           repPrice = src.length > 0 ? Math.min(...src.map(p => p.price)) : null;
           repContext = repPrice ? `desde ${repPrice.toFixed(2)}€/mes` : null;
         } else if (cat === 'restaurante') {
-          // Average of platos (>= 3€) to avoid coffees/water skewing downwards
-          const platos = prices.filter(p => p.price >= 3);
-          const src = platos.length >= 2 ? platos : prices;
-          repPrice = src.reduce((a,b) => a + b.price, 0) / src.length;
-          repContext = `Media de ${src.length} plato${src.length !== 1 ? 's' : ''} · media España ~12€`;
+          // Si hay product específico (café, cerveza, menú), usar ese precio directamente
+          // Si no hay product o el bar no tiene ese precio, usar media de platos
+          const productFiltered = product ? prices.filter(p => fuzzyMatch(product, p.product)) : [];
+          if (productFiltered.length > 0) {
+            // Precio específico del producto solicitado (café, cerveza, menú)
+            repPrice = Math.min(...productFiltered.map(p => p.price));
+            repContext = `${productFiltered[0].product} · ${productFiltered.length} reporte${productFiltered.length!==1?'s':''}`;
+          } else {
+            // Sin precio específico: media de platos ≥3€
+            const platos = prices.filter(p => p.price >= 3);
+            const src = platos.length >= 2 ? platos : prices;
+            repPrice = src.length > 0 ? src.reduce((a,b) => a + b.price, 0) / src.length : null;
+            repContext = repPrice ? `Media de ${src.length} plato${src.length !== 1 ? 's' : ''}` : null;
+          }
         } else if (cat === 'farmacia') {
           // Average of real medicines (>= 1€), exclude masks/bandages
           const meds = prices.filter(p => p.price >= 1);
@@ -1262,8 +1280,20 @@ app.get('/api/places', optAuth, async (req, res) => {
 
     });
     const filtered = result.filter(Boolean);
-    if (sort==='price') filtered.sort((a,b)=>(a.minPrice??999)-(b.minPrice??999));
-    else filtered.sort((a,b)=>(a._dist||999)-(b._dist||999));
+    if (sort==='price') {
+      filtered.sort((a,b)=>(a.minPrice??999)-(b.minPrice??999));
+    } else if (sort==='price_proximity') {
+      // Score combinado: 60% precio normalizado + 40% distancia normalizada
+      const maxDist = Math.max(...filtered.map(p=>p._dist||0), 1);
+      const maxPrice = Math.max(...filtered.map(p=>p.minPrice||0), 1);
+      filtered.sort((a,b)=>{
+        const sa = 0.6*(a.minPrice||maxPrice)/maxPrice + 0.4*(a._dist||maxDist)/maxDist;
+        const sb = 0.6*(b.minPrice||maxPrice)/maxPrice + 0.4*(b._dist||maxDist)/maxDist;
+        return sa - sb;
+      });
+    } else {
+      filtered.sort((a,b)=>(a._dist||999)-(b._dist||999));
+    }
     res.json(filtered.slice(0,200));
   } catch(e) { fail(res, e.message, 500); }
 });
