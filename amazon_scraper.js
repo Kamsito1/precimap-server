@@ -195,8 +195,8 @@ async function verifyActiveBotDeals(supabase, botUserId) {
     for (const deal of activeDeals) {
       try {
         await sleep(2000 + Math.random() * 2000);
-        // Extraer ASIN si no lo tenemos guardado
-        const asin = deal.asin || extractAsin(deal.url);
+        // Extraer ASIN directamente de la URL (columna asin no existe en DB)
+        const asin = extractAsin(deal.url);
         if (!asin) continue;
 
         // Verificar precio actual en Amazon España
@@ -211,8 +211,6 @@ async function verifyActiveBotDeals(supabase, botUserId) {
           // El chollo ya no está activo — desactivar
           await supabase.from('deals').update({
             is_active: 0,
-            expired_reason: `Precio actual: ${currentPrice}€ (oferta era ${deal.deal_price}€)`,
-            expired_at: new Date().toISOString(),
           }).eq('id', deal.id);
           console.log(`❌ Oferta expirada: "${deal.title.slice(0,50)}" — precio subió de ${deal.deal_price}€ a ${currentPrice}€`);
           expired++;
@@ -318,21 +316,85 @@ async function scrapeAmazonOutlet() {
   return results;
 }
 
+// ─── FUENTE 4: ASINs curados — siempre populares en España ──────────────────
+// Productos con alta rotación y ofertas frecuentes en Amazon.es
+const CURATED_ASINS = [
+  // Tech
+  'B09B8RVKJ8', // Echo Dot 5
+  'B0BNS9C1GH', // Fire TV Stick 4K Max
+  'B09TMF6742', // Kindle Paperwhite 16GB
+  'B0CHX3QXNR', // Echo Show 8
+  'B09JSPN9X8', // Fire TV Stick 4K
+  // Hogar
+  'B07D3LHKNS', // Instant Pot Duo
+  'B09P45WNMB', // Oral-B iO Series 6
+  'B09P2SCZJQ', // Roomba j7+
+  // Salud
+  'B0006VDVMC', // Solgar VM-75
+  'B07CTHFQGQ', // Omega-3 Solgar
+  // Gaming/Libros
+  'B09X7FXHVJ', // Amazon Basics ratón
+  'B07ZWJ3KBG', // Audible 3 meses
+];
+
+async function scrapeCuratedAsins() {
+  const results = [];
+  for (const asin of CURATED_ASINS) {
+    try {
+      await sleep(1500 + Math.random() * 1000);
+      const price = await checkAmazonCurrentPrice(asin);
+      if (!price || price <= 0) continue;
+
+      const url = `https://www.amazon.es/dp/${asin}`;
+      const res = await fetch(url, { headers: getHeaders(), timeout: 12000 });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const $ = cheerio.load(html);
+
+      const title = $('#productTitle').text().trim() || $('h1').first().text().trim();
+      if (!title) continue;
+
+      const strikeEl = $('.a-text-price .a-offscreen').first().text().replace(/[€\s]/g,'').replace(',','.');
+      const original = parseFloat(strikeEl) || null;
+      const disc = original && original > price ? Math.round((1 - price/original) * 100) : null;
+      if (disc && disc < 15) continue; // at least 15% off
+
+      const imgSrc = $('#imgTagWrapperId img, #landingImage').attr('src') || null;
+
+      results.push({
+        title: title.slice(0, 200),
+        url: addAffiliateTag(url),
+        deal_price: price,
+        original_price: original,
+        discount_percent: disc,
+        image_url: imgSrc,
+        store: 'Amazon',
+        category: detectCategory(title),
+        source: 'curated',
+        asin,
+      });
+    } catch(e) { /* skip */ }
+  }
+  return results;
+}
+
 // ─── MAIN: Run all scrapers & save to DB ─────────────────────────────────────
 async function runAmazonScraper(supabase, botUserId) {
   console.log('🤖 Amazon scraper starting...');
   const all = [];
 
   // Run all scrapers
-  const [deals, rss, outlet] = await Promise.allSettled([
+  const [deals, rss, outlet, curated] = await Promise.allSettled([
     scrapeAmazonDeals(),
     scrapeChollosRSS(),
     scrapeAmazonOutlet(),
+    scrapeCuratedAsins(),
   ]);
 
   if (deals.status === 'fulfilled') all.push(...deals.value);
   if (rss.status === 'fulfilled') all.push(...rss.value);
   if (outlet.status === 'fulfilled') all.push(...outlet.value);
+  if (curated.status === 'fulfilled') all.push(...curated.value);
 
   console.log(`Found ${all.length} potential deals from all sources`);
 
