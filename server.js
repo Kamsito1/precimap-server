@@ -119,6 +119,30 @@ function fuzzyMatch(query, target) {
   }
   return false;
 }
+// Grupos de productos — para que "Café con leche" también encuentre "Café solo", etc.
+const PRODUCT_GROUPS = {
+  'cafe': ['cafe', 'coffee', 'cortado', 'cappuccino', 'expreso', 'espresso', 'americano'],
+  'cerveza': ['cerveza', 'cana', 'birra', 'caña', 'beer'],
+  'menu': ['menu', 'menú', 'comida', 'almuerzo', 'combinado'],
+};
+function getProductGroup(product) {
+  if (!product) return null;
+  const p = normalize(product);
+  for (const [group, keywords] of Object.entries(PRODUCT_GROUPS)) {
+    if (keywords.some(k => p.includes(k))) return group;
+  }
+  return null;
+}
+function productMatch(query, target) {
+  if (!query || !target) return false;
+  // Primero fuzzy directo
+  if (fuzzyMatch(query, target)) return true;
+  // Luego por grupo: si ambos pertenecen al mismo grupo (ej: "café con leche" y "café solo")
+  const qGroup = getProductGroup(query);
+  const tGroup = getProductGroup(target);
+  if (qGroup && tGroup && qGroup === tGroup) return true;
+  return false;
+}
 function calcDist(lat1, lng1, lat2, lng2) {
   if (!lat1||!lng1||!lat2||!lng2) return 999;
   const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLng = (lng2-lng1)*Math.PI/180;
@@ -1205,7 +1229,7 @@ app.get('/api/places', optAuth, async (req, res) => {
     });
     const result = list.map(place => {
       let prices = (pricesByPlace[place.id] || []).slice(0, 10);
-      let productPrices = product ? prices.filter(p => fuzzyMatch(product, p.product)) : prices;
+      let productPrices = product ? prices.filter(p => productMatch(product, p.product)) : prices;
       // Para restaurantes: mostrar siempre el lugar aunque no tenga el precio específico,
       // usar product solo para calcular repPrice. Para otras categorías: filtrar estrictamente.
       if (product && productPrices.length === 0) {
@@ -1251,7 +1275,7 @@ app.get('/api/places', optAuth, async (req, res) => {
         } else if (cat === 'restaurante') {
           // Si hay product específico (café, cerveza, menú), usar ese precio directamente
           // Si no hay product o el bar no tiene ese precio, usar media de platos
-          const productFiltered = product ? prices.filter(p => fuzzyMatch(product, p.product)) : [];
+          const productFiltered = product ? prices.filter(p => productMatch(product, p.product)) : [];
           if (productFiltered.length > 0) {
             // Precio específico del producto solicitado (café, cerveza, menú)
             repPrice = Math.min(...productFiltered.map(p => p.price));
