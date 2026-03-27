@@ -231,6 +231,11 @@ async function verifyActiveBotDeals(supabase, botUserId) {
 }
 
 // Comprueba el precio actual de un ASIN en Amazon.es
+// Imagen fiable por ASIN — no requiere scraping
+function asinToImageUrl(asin) {
+  return `https://m.media-amazon.com/images/P/${asin}.01._SCLZZZZZZZ_.jpg`;
+}
+
 // Returns { price, image_url, title } — or null on error
 async function checkAmazonProduct(asin) {
   try {
@@ -464,7 +469,7 @@ async function runAmazonScraper(supabase, botUserId) {
         deal_price: deal.deal_price,
         original_price: deal.original_price || null,
         discount_percent: deal.discount_percent || null,
-        image_url: deal.image_url || null,
+        image_url: deal.image_url || (deal.asin ? asinToImageUrl(deal.asin) : null),
         store: deal.store,
         category: deal.category,
         reported_by: botUserId,
