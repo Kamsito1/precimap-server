@@ -1171,7 +1171,8 @@ app.get('/api/places', optAuth, async (req, res) => {
     let q = supabase.from('places').select('*').eq('is_active', 1);
     if (cat && cat!=='all') q = q.eq('category', cat);
     const hasCity = city && city.trim() !== '';
-    if (hasCity) q = q.or(`address.ilike.%${city}%,city.ilike.%${city}%`);
+    // Filtrar por campo city exacto (ilike para acentos) — NO por address para evitar falsos positivos
+    if (hasCity) q = q.ilike('city', `%${city}%`);
     if (search) q = q.ilike('name', `%${search}%`);
     const { data: places, error } = await q.limit(500);
     if (error) throw error;
