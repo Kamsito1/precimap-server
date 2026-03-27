@@ -460,7 +460,7 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
       await db.update('users', user.id, { streak, last_report_date: today }).catch(() => {});
       checkBadges(user.id).catch(() => {});
       const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-      res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points, avatar_url: user.avatar_url || avatar_url, streak, is_admin: isAdmin(user.email) } });
+      res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points, avatar_url: user.avatar_url || avatar_url, streak, google_id: user.google_id || google_id, is_admin: isAdmin(user.email) } });
     } else {
       // New user — register with Google (no password needed)
       const randomHash = await bcrypt.hash(Math.random().toString(36) + Date.now(), 10);
@@ -474,7 +474,7 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
         last_report_date: new Date().toISOString().split('T')[0],
       });
       const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
-      res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: 0, avatar_url: avatar_url, streak: 1, is_admin: isAdmin(user.email) } });
+      res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: 0, avatar_url: avatar_url, streak: 1, google_id: google_id, is_admin: isAdmin(user.email) } });
     }
   } catch (e) { fail(res, e.message); }
 });
@@ -666,17 +666,24 @@ app.post('/api/users/me/change-password', auth, async (req, res) => {
 app.post('/api/users/me/delete', auth, async (req, res) => {
   try {
     const { password } = req.body;
-    if (!password) return fail(res, 'Debes confirmar tu contraseña');
     const user = await db.query('users', { eq: { id: req.user.id }, single: true });
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return fail(res, 'Contraseña incorrecta');
+    // Google Sign-In users have google_id but no real password — allow delete without password
+    if (user.google_id && !password) {
+      // Google user — no password needed, proceed with deletion
+    } else {
+      if (!password) return fail(res, 'Debes confirmar tu contraseña');
+      const match = await bcrypt.compare(password, user.password_hash);
+      if (!match) return fail(res, 'Contraseña incorrecta');
+    }
     await supabase.from('users').update({
       name: '[Usuario eliminado]',
       email: `deleted_${req.user.id}_${Date.now()}@deleted.com`,
       password_hash: '', avatar_url: null, bio: null, is_deleted: 1,
+      google_id: null,
     }).eq('id', req.user.id);
     await supabase.from('notifications').delete().eq('user_id', req.user.id);
     await supabase.from('price_alerts').delete().eq('user_id', req.user.id);
+    await supabase.from('favorite_stations').delete().eq('user_id', req.user.id);
     res.json({ ok: true });
   } catch(e) { fail(res, e.message); }
 });
