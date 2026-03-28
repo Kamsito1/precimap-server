@@ -335,10 +335,10 @@ app.get('/api/health', (req, res) => res.json({
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
-  server: '3.6.0',
+  server: '3.8.0',
   app: '1.3.0',
-  features: ['gasolineras-12213','chollos-50','eventos-30','usuarios-33','trending-deals','trending-events','search-global','tips-ahorro-18','google-signin','admob','favorites-sync','deal-votes-sync','weekly-cost-supermarkets'],
-  updated: '2026-03-27',
+  features: ['gasolineras-12225','places-27441','precios-29423','users-43','chollos-5','eventos-43','stats-por-ciudad','feed-actividad','trending-deals','trending-events','search-global','tips-ahorro-18','google-signin','admob','favorites-sync','weekly-cost-supermarkets','price-proximity-sort','cache-warmup'],
+  updated: '2026-03-28',
 }));
 // ─── TIPS DE AHORRO ─────────────────────────────────────────────────────────
 const SAVING_TIPS = [
