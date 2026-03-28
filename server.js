@@ -546,6 +546,57 @@ app.post('/api/auth/google', authLimiter, async (req, res) => {
   } catch (e) { fail(res, e.message); }
 });
 
+// ─── APPLE SIGN-IN ────────────────────────────────────────────────────────────
+app.post('/api/auth/apple', authLimiter, async (req, res) => {
+  try {
+    const { apple_id, email, name, identity_token } = req.body;
+    if (!apple_id) return fail(res, 'apple_id requerido');
+
+    // Buscar usuario por apple_id primero (email puede ser null en logins repetidos)
+    let user = await db.query('users', { eq: { apple_id }, single: true }).catch(() => null);
+
+    if (!user && email) {
+      // Primer login: buscar por email por si ya tiene cuenta
+      const normalizedEmail = email.trim().toLowerCase();
+      user = await db.query('users', { eq: { email: normalizedEmail }, single: true }).catch(() => null);
+      if (user && !user.apple_id) {
+        // Vincular apple_id a cuenta existente
+        await db.update('users', user.id, { apple_id }).catch(() => {});
+        user = { ...user, apple_id };
+      }
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    if (user) {
+      // Login existente
+      let streak = user.streak || 0;
+      if (user.last_report_date === yesterday) streak++;
+      else if (user.last_report_date !== today) streak = 1;
+      await db.update('users', user.id, { streak, last_report_date: today }).catch(() => {});
+      checkBadges(user.id).catch(() => {});
+      const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
+      return res.json({ token, user: { id: user.id, name: user.name, email: user.email, points: user.points || 0, avatar_url: user.avatar_url, streak, apple_id, is_admin: isAdmin(user.email) } });
+    }
+
+    // Nuevo usuario Apple
+    if (!email) return fail(res, 'Email requerido en el primer inicio de sesión con Apple');
+    const normalizedEmail = email.trim().toLowerCase();
+    const randomHash = await bcrypt.hash(Math.random().toString(36) + Date.now(), 10);
+    const newUser = await db.insert('users', {
+      name: (name || 'Usuario Apple').trim(),
+      email: normalizedEmail,
+      password_hash: randomHash,
+      apple_id,
+      points: 0, streak: 1,
+      last_report_date: today,
+    });
+    const token = jwt.sign({ id: newUser.id, name: newUser.name, email: newUser.email }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ token, user: { id: newUser.id, name: newUser.name, email: newUser.email, points: 0, avatar_url: null, streak: 1, apple_id, is_admin: false } });
+  } catch (e) { fail(res, e.message); }
+});
+
 app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   try {
     const { email } = req.body;
