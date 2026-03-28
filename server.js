@@ -1189,6 +1189,40 @@ app.get('/api/places/:id/price-history', async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
+// ─── STATS DE PRECIOS POR CIUDAD ─────────────────────────────────────────────
+app.get('/api/places/stats', async (req, res) => {
+  try {
+    const { city } = req.query;
+    if (!city) return fail(res, 'city requerida', 400);
+
+    // Precios mínimos por categoría en esta ciudad
+    const { data: places } = await supabase.from('places')
+      .select('id,category').eq('is_active',1).ilike('city',`%${city}%`);
+    if (!places?.length) return res.json({ city, stats: {} });
+
+    const ids = places.map(p => p.id);
+    const { data: prices } = await supabase.from('prices')
+      .select('place_id,product,price')
+      .eq('is_active',1).in('place_id', ids);
+
+    // Agrupar por categoría + producto
+    const stats = {};
+    const catOf = Object.fromEntries(places.map(p => [p.id, p.category]));
+    (prices||[]).forEach(p => {
+      const cat = catOf[p.place_id];
+      const key = cat === 'restaurante' ? p.product : cat;
+      if (!stats[key]) stats[key] = { min: p.price, max: p.price, count: 0, sum: 0 };
+      stats[key].min = Math.min(stats[key].min, p.price);
+      stats[key].max = Math.max(stats[key].max, p.price);
+      stats[key].sum += p.price;
+      stats[key].count++;
+    });
+    Object.values(stats).forEach(s => { s.avg = Math.round(s.sum/s.count*100)/100; delete s.sum; });
+
+    res.json({ city, places: places.length, prices: prices?.length || 0, stats });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 // ─── CACHÉ para /api/places (5 minutos) ──────────────────────────────────────
 const _placesCache = new Map();
 const PLACES_CACHE_TTL = 5 * 60 * 1000;
