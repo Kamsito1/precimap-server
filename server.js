@@ -927,9 +927,9 @@ app.get('/api/deals', optAuth, async (req, res) => {
 
     if (cat && cat !== 'all') q = q.eq('category', cat);
     if (search) q = q.ilike('title', `%${search}%`);
-    if (min_price) q = q.gte('deal_price', parseFloat(min_price));
-    if (max_price) q = q.lte('deal_price', parseFloat(max_price));
-    if (min_discount) q = q.gte('discount_percent', parseFloat(min_discount));
+    if (min_price && !isNaN(parseFloat(min_price))) q = q.gte('deal_price', parseFloat(min_price));
+    if (max_price && !isNaN(parseFloat(max_price))) q = q.lte('deal_price', parseFloat(max_price));
+    if (min_discount && !isNaN(parseFloat(min_discount))) q = q.gte('discount_percent', parseFloat(min_discount));
 
     if (sort === 'hot' || sort === 'temp')
       q = q.order('votes_up', { ascending: false }).order('detected_at', { ascending: false });
@@ -1368,11 +1368,13 @@ app.get('/api/places', optAuth, async (req, res) => {
     let list = places || [];
     // Radius filter only if no city and radius < 500
     const r = parseFloat(radius);
-    if (lat && lng && !hasCity && r && r < 500) {
-      const uLat = parseFloat(lat), uLng = parseFloat(lng);
+    const uLat = lat ? parseFloat(lat) : NaN;
+    const uLng = lng ? parseFloat(lng) : NaN;
+    const hasCoords = !isNaN(uLat) && !isNaN(uLng);
+    if (hasCoords && !hasCity && r && r < 500) {
       list = list.filter(p => { p._dist = calcDist(uLat, uLng, p.lat, p.lng); return p._dist <= r; });
-    } else if (lat && lng) {
-      list.forEach(p => p._dist = calcDist(parseFloat(lat), parseFloat(lng), p.lat, p.lng));
+    } else if (hasCoords) {
+      list.forEach(p => p._dist = calcDist(uLat, uLng, p.lat, p.lng));
     } else { list.forEach(p => p._dist = 999); }
     // Attach prices — single bulk query instead of N+1
     const placeIds = list.map(p => p.id);
@@ -1521,11 +1523,12 @@ app.get('/api/places', optAuth, async (req, res) => {
 app.post('/api/places', auth, async (req, res) => {
   try {
     const { name, category: rawCat, lat, lng, address, city } = req.body;
-    if (!name||!rawCat||!lat||!lng) return fail(res, 'Faltan campos obligatorios');
+    const parsedLat = parseFloat(lat), parsedLng = parseFloat(lng);
+    if (!name||!rawCat||isNaN(parsedLat)||isNaN(parsedLng)) return fail(res, 'Faltan campos obligatorios');
     // Normalizar categorías obsoletas → restaurante
     const CAT_MAP = { bar:'restaurante', cafe:'restaurante', cafeteria:'restaurante' };
     const category = CAT_MAP[rawCat] || rawCat;
-    const place = await db.insert('places', { name, category, lat: parseFloat(lat), lng: parseFloat(lng), address: address||'', city: city||'', created_by: req.user.id, is_active: 1 });
+    const place = await db.insert('places', { name, category, lat: parsedLat, lng: parsedLng, address: address||'', city: city||'', created_by: req.user.id, is_active: 1 });
     await addPoints(req.user.id, 5, 'añadir lugar');
     // Invalidar caché de places para que el nuevo lugar aparezca inmediatamente
     if (city) {
@@ -1854,7 +1857,9 @@ app.post('/api/events', auth, async (req, res) => {
   try {
     const { title, category, date, time, venue, address, city, lat, lng, price_from, is_free, url, description } = req.body;
     if (!title||!category||!date) return fail(res, 'Título, categoría y fecha son obligatorios');
-    const event = await db.insert('events', { title: title.trim(), category, date, time: time||null, venue: venue||null, address: address||null, city: city||null, lat: lat?parseFloat(lat):null, lng: lng?parseFloat(lng):null, price_from: price_from?parseFloat(price_from):null, is_free: is_free?1:0, url: url||null, description: description||null, reported_by: req.user.id, source: 'user', is_active: 1, votes_up: 0 });
+    const evLat = lat ? (parseFloat(lat)||null) : null;
+    const evLng = lng ? (parseFloat(lng)||null) : null;
+    const event = await db.insert('events', { title: title.trim(), category, date, time: time||null, venue: venue||null, address: address||null, city: city||null, lat: evLat, lng: evLng, price_from: price_from?(parseFloat(price_from)||null):null, is_free: is_free?1:0, url: url||null, description: description||null, reported_by: req.user.id, source: 'user', is_active: 1, votes_up: 0 });
     await addPoints(req.user.id, 5, 'añadir evento');
     res.json(event);
   } catch(e) { fail(res, e.message); }
@@ -1891,7 +1896,7 @@ app.post('/api/banks', auth, async (req, res) => {
   try {
     const { bank_name, product_type, title, description, interest_rate, bonus_amount, conditions, url } = req.body;
     if (!bank_name||!title||!product_type) return fail(res, 'Faltan campos');
-    const deal = await db.insert('bank_deals', { bank_name, product_type, title, description: description||null, interest_rate: interest_rate?parseFloat(interest_rate):null, bonus_amount: bonus_amount?parseFloat(bonus_amount):null, conditions: conditions||null, url: url||null, reported_by: req.user.id, is_active: 1 });
+    const deal = await db.insert('bank_deals', { bank_name, product_type, title, description: description||null, interest_rate: interest_rate?(parseFloat(interest_rate)||null):null, bonus_amount: bonus_amount?(parseFloat(bonus_amount)||null):null, conditions: conditions||null, url: url||null, reported_by: req.user.id, is_active: 1 });
     await addPoints(req.user.id, 5, 'añadir oferta bancaria');
     res.json(deal);
   } catch(e) { fail(res, e.message); }
