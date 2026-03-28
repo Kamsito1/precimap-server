@@ -1411,8 +1411,8 @@ app.get('/api/places', optAuth, async (req, res) => {
           // Average of real medicines (>= 1€), exclude masks/bandages
           const meds = prices.filter(p => p.price >= 1);
           const src = meds.length >= 1 ? meds : prices;
-          repPrice = src.reduce((a,b) => a + b.price, 0) / src.length;
-          repContext = `Media de ${src.length} medicamento${src.length !== 1 ? 's' : ''} · media España ~4€`;
+          repPrice = src.length > 0 ? src.reduce((a,b) => a + b.price, 0) / src.length : null;
+          repContext = repPrice ? `Media de ${src.length} medicamento${src.length !== 1 ? 's' : ''} · media España ~4€` : null;
         } else {
           repPrice = prices.reduce((a,b) => a + b.price, 0) / prices.length;
           repContext = `Media de ${prices.length} productos`;
@@ -1544,6 +1544,16 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
     await db.insert('price_history', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice });
     await addPoints(req.user.id, 10, 'reportar precio');
     await checkBadges(req.user.id);
+    // Actualizar last_report_date y streak al reportar precio
+    const today = new Date().toISOString().split('T')[0];
+    const yesterday = new Date(Date.now()-86400000).toISOString().split('T')[0];
+    const reportUser = await db.query('users', { eq: { id: req.user.id }, select: 'streak,last_report_date', single: true }).catch(()=>null);
+    if (reportUser) {
+      let streak = reportUser.streak || 0;
+      if (reportUser.last_report_date === yesterday) streak++;
+      else if (reportUser.last_report_date !== today) streak = 1;
+      db.update('users', req.user.id, { streak, last_report_date: today }).catch(()=>{});
+    }
     // Invalidar cachés afectados para que la siguiente petición tenga datos frescos
     _recentCache = null;
     _globalStatsCache = null;
