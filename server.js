@@ -558,8 +558,7 @@ app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
     const expires = new Date(Date.now() + 15*60000).toISOString();
     await supabase.from('password_resets').delete().eq('email', normalizedEmail);
     await db.insert('password_resets', { email: normalizedEmail, code, expires_at: expires });
-    // In production: send real email. For now log server-side only (NEVER in response)
-    console.log(`🔑 [DEV ONLY] Reset code for ${normalizedEmail}: ${code}`);
+    // TODO: send real email with code. Never log codes in production.
     res.json({ ok: true, message: 'Si el email existe, recibirás el código en breve' });
   } catch(e) { fail(res, e.message); }
 });
@@ -1269,11 +1268,12 @@ app.get('/api/places/:id/price-history', async (req, res) => {
     const placeId = parseInt(req.params.id);
     if (!placeId) return fail(res, 'Invalid place id', 400);
     const { product, limit = 30 } = req.query;
+    const safeLimit = Math.max(1, Math.min(100, parseInt(limit) || 30));
     let q = supabase.from('price_history')
       .select('*')
       .eq('place_id', placeId)
       .order('reported_at', { ascending: true })
-      .limit(parseInt(limit));
+      .limit(safeLimit);
     if (product) q = q.eq('product', product);
     const { data, error } = await q;
     if (error) throw error;
