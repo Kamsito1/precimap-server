@@ -1922,7 +1922,7 @@ app.post('/api/deals/:id/report-expired', auth, async (req, res) => {
     const { count } = await supabase.from('deal_expire_votes')
       .select('*', { count: 'exact', head: true }).eq('deal_id', dealId);
     let deactivated = false;
-    if (count >= 5) {
+    if (count >= 50) {
       await supabase.from('deals').update({ is_active: 0 }).eq('id', dealId);
       deactivated = true;
     } else {
