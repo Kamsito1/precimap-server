@@ -1298,7 +1298,9 @@ app.get('/api/places', optAuth, async (req, res) => {
           repPrice = prices.reduce((a,b) => a + b.price, 0) / prices.length;
           repContext = `Media de ${prices.length} productos`;
         }
-        repPrice = Math.round(repPrice * 100) / 100;
+        if (repPrice !== null && repPrice !== undefined) {
+          repPrice = Math.round(repPrice * 100) / 100;
+        }
       }
 
       return { ...place, prices, minPrice: repPrice, repPrice, repContext, hasProduct };
