@@ -584,12 +584,11 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
 // ─── USER PROFILE + AVATAR ────────────────────────────────────────────────────
 app.get('/api/users/me', auth, async (req, res) => {
   try {
-    const [user, badges, notifs] = await Promise.all([
+    // Un solo Promise.all con todas las queries en paralelo
+    const [user, badges, notifs, reportCount, verifiedCount, dealCount] = await Promise.all([
       db.query('users', { eq: { id: req.user.id }, single: true }),
       db.query('badges', { eq: { user_id: req.user.id } }),
       db.query('notifications', { eq: { user_id: req.user.id }, order: { col: 'created_at', asc: false }, limit: 20 }),
-    ]);
-    const [reportCount, verifiedCount, dealCount] = await Promise.all([
       db.count('prices', { eq: { reported_by: req.user.id } }),
       db.count('prices', { eq: { reported_by: req.user.id, status: 'verified' } }),
       db.count('deals',  { eq: { reported_by: req.user.id } }),
