@@ -402,7 +402,12 @@ app.get('/api/tips', (req, res) => {
   res.json(tips);
 });
 
+let _statsCache = null, _statsCacheTime = 0;
 app.get('/api/stats', async (req, res) => {  try {
+    // Caché 2 minutos para stats — cambian lentamente
+    if (_statsCache && Date.now() - _statsCacheTime < 2*60*1000) {
+      return res.set('Cache-Control','public,max-age=60').json(_statsCache);
+    }
     const [places, prices, deals, users, events, priceHistory] = await Promise.all([
       db.count('places'), db.count('prices'), db.count('deals'),
       db.count('users'),  db.count('events'), db.count('price_history'),
@@ -415,12 +420,14 @@ app.get('/api/stats', async (req, res) => {  try {
         if (vals.length) gasStats[fuel] = { min: Math.min(...vals), avg: vals.reduce((a,b)=>a+b,0)/vals.length, max: Math.max(...vals) };
       });
     }
-    res.json({
+    const result = {
       places, prices, deals, users, events, price_history: priceHistory,
       gasolineras: _gasCache?.length || 0,
       gas_stats: gasStats,
-      version: '3.7.0',
-    });
+      version: '3.8.0',
+    };
+    _statsCache = result; _statsCacheTime = Date.now();
+    res.set('Cache-Control','public,max-age=60').json(result);
   } catch(e) { fail(res, e.message, 500); }
 });
 
@@ -761,9 +768,15 @@ app.post('/api/notifications/read', auth, async (req, res) => {
 });
 
 // ─── LEADERBOARD — with real period filter, no N+1 ───────────────────────────
+const _leaderCache = new Map(); // key: period, val: {data, time}
 app.get('/api/leaderboard', async (req, res) => {
   try {
     const { period = 'all' } = req.query;
+    // Caché 3 minutos
+    const lc = _leaderCache.get(period);
+    if (lc && Date.now() - lc.time < 3*60*1000) {
+      return res.set('Cache-Control','public,max-age=60').json(lc.data);
+    }
     const BOT_EMAIL = 'bot@precimap.es';
 
     // Get bot user ID to exclude from ranking
@@ -800,10 +813,13 @@ app.get('/api/leaderboard', async (req, res) => {
           .eq('is_deleted', 0).order('points', { ascending: false }).limit(30);
         if (botId) fbQ = fbQ.neq('id', botId);
         const { data: fallback } = await fbQ;
-        return res.json((fallback || []).map(u => ({ ...u, reports: 0, period_fallback: true })));
+        const fb = (fallback || []).map(u => ({ ...u, reports: 0, period_fallback: true }));
+        _leaderCache.set(period, { data: fb, time: Date.now() });
+        return res.set('Cache-Control','public,max-age=60').json(fb);
       }
       // Add missing users who have points but 0 reports this period (to fill ranking)
-      return res.json(sorted);
+      _leaderCache.set(period, { data: sorted, time: Date.now() });
+      return res.set('Cache-Control','public,max-age=60').json(sorted);
     }
 
     // All time: rank by points, exclude bot
