@@ -619,7 +619,14 @@ app.get('/api/users/me/deals', auth, async (req, res) => {
       else if (score>=3||dec>0.5) { temp='🔥'; tc='#D97706'; }
       else if (score>=0) { temp='😐'; tc='#6B7280'; }
       else { temp='🧊'; tc='#3B82F6'; }
-      return { ...d, temperature: temp, temp_color: tc };
+      return { ...d, temperature: temp, temp_color: tc,
+        images: Array.isArray(d.images) ? d.images : [],
+        votes_up: d.votes_up || 0,
+        votes_down: d.votes_down || 0,
+        expire_reports: d.expire_reports || 0,
+        deal_price: d.deal_price != null ? Number(d.deal_price) : null,
+        discount_percent: d.discount_percent != null ? Number(d.discount_percent) : null,
+      };
     });
     res.json(deals);
   } catch(e) { fail(res, e.message, 500); }
@@ -2084,7 +2091,6 @@ app.post('/api/price-changes/:id/vote', auth, async (req, res) => {
     // Record vote
     await supabase.from('price_change_votes').insert({ request_id: reqId, user_id: req.user.id, vote });
     // Update tallies
-    const field = vote === 1 ? 'votes_up' : 'votes_down';
     const { data: pcr } = await supabase.from('price_change_requests')
       .select('*').eq('id', reqId).single();
     if (!pcr) return fail(res, 'Solicitud no encontrada');
