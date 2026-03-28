@@ -1308,12 +1308,15 @@ app.get('/api/places', optAuth, async (req, res) => {
     });
     const filtered = result.filter(Boolean);
     if (sort==='price') {
-      // Primero los que tienen el producto pedido, ordenados por precio
-      // Al final los que no tienen el producto (sorted by proximity)
+      // Con precio → ordenados por precio ascendente
+      // Sin precio → ordenados por distancia (más cercanos primero)
       filtered.sort((a,b)=>{
-        if (a.hasProduct && !b.hasProduct) return -1;
-        if (!a.hasProduct && b.hasProduct) return 1;
-        return (a.minPrice??999)-(b.minPrice??999);
+        const aHas = a.hasProduct && a.minPrice > 0;
+        const bHas = b.hasProduct && b.minPrice > 0;
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+        if (aHas && bHas) return (a.minPrice||999) - (b.minPrice||999);
+        return (a._dist||999) - (b._dist||999); // ambos sin precio: por cercanía
       });
     } else if (sort==='price_proximity') {
       // Score combinado: 60% precio normalizado + 40% distancia normalizada
