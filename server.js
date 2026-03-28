@@ -1677,10 +1677,17 @@ app.get('/api/gasolineras', async (req, res) => {
       result.sort((a,b) => (a.minPrice||999)-(b.minPrice||999));
     }
 
-    // City filter
+    // City filter — exact city match first, then province fallback
     if (city && city !== 'all') {
       const nc = normalize(city);
-      result = result.filter(s => normalize(s.city).includes(nc) || normalize(s.province).includes(nc));
+      // Primero intentar ciudad exacta
+      const exactMatch = result.filter(s => normalize(s.city) === nc);
+      if (exactMatch.length > 0) {
+        result = exactMatch; // hay gasolineras en esa ciudad exacta
+      } else {
+        // Fallback: buscar por provincia (cuando el usuario escribe una provincia)
+        result = result.filter(s => normalize(s.province).includes(nc));
+      }
     }
 
     res.json(result.slice(0, 15000)); // return all for client-side caching
