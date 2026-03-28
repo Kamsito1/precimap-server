@@ -323,7 +323,15 @@ app.get('/api/levels', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.7.0', db: 'supabase', stations: _gasCache?.length || 0 }));
+app.get('/api/health', (req, res) => res.json({
+  ok: true,
+  version: '3.8.0',
+  db: 'supabase',
+  stations: _gasCache?.length || 0,
+  gas_cache_age_min: _gasCacheTime ? Math.round((Date.now()-_gasCacheTime)/60000) : null,
+  places_cache_size: _placesCache?.size || 0,
+  stats_cache_size: _statsCache?.size || 0,
+}));
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
@@ -2042,7 +2050,7 @@ app.post('/api/admin/run-scraper', auth, async (req, res) => {
 
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🗺️  PreciMap v3.7.0 en http://localhost:${PORT}`);
+  console.log(`\n🗺️  PreciMap v3.8.0 en http://localhost:${PORT}`);
   console.log(`🗄️  Base de datos: Supabase (${process.env.SUPABASE_URL ? '✅ Connected' : '❌ No URL'})\n`);
 
   // Warmup caché con las queries más frecuentes para las ciudades principales
