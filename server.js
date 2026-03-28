@@ -749,14 +749,18 @@ app.delete('/api/users/me', auth, async (req, res) => {
 
 app.get('/api/users/:id/public', async (req, res) => {
   try {
-    const user = await db.query('users', { eq: { id: req.params.id }, select: 'id,name,avatar_url,bio,points,streak,created_at', single: true });
-    if (!user) return fail(res, 'Usuario no encontrado', 404);
+    const uid = parseInt(req.params.id);
+    if (!uid) return fail(res, 'ID inválido', 400);
+    const { data: user, error } = await supabase.from('users')
+      .select('id,name,avatar_url,bio,points,streak,created_at')
+      .eq('id', uid).single();
+    if (error || !user) return fail(res, 'Usuario no encontrado', 404);
     const [badges, reportCount, dealCount] = await Promise.all([
-      db.query('badges', { eq: { user_id: req.params.id } }),
-      db.count('prices', { eq: { reported_by: req.params.id } }),
-      db.count('deals',  { eq: { reported_by: req.params.id } }),
+      db.query('badges', { eq: { user_id: uid } }),
+      db.count('prices', { eq: { reported_by: uid } }),
+      db.count('deals',  { eq: { reported_by: uid } }),
     ]);
-    res.json({ ...user, badges: badges||[], stats: { reports: reportCount, deals: dealCount } });
+    res.json({ ...user, badges: badges||[], stats: { reports: reportCount||0, deals: dealCount||0 } });
   } catch(e) { fail(res, e.message, 500); }
 });
 
@@ -902,7 +906,9 @@ app.get('/api/deals', optAuth, async (req, res) => {
     else if (sort === 'price')
       q = q.order('deal_price', { ascending: true, nullsFirst: false });
 
-    q = q.range(parseInt(offset), parseInt(offset)+parseInt(limit)-1);
+    const safeLimit = Math.max(1, Math.min(50, parseInt(limit) || 20));
+    const safeOffset = Math.max(0, parseInt(offset) || 0);
+    q = q.range(safeOffset, safeOffset + safeLimit - 1);
     const { data, error } = await q;
     if (error) throw error;
 
