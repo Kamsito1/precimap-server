@@ -2110,17 +2110,25 @@ app.post('/api/price-changes/:id/vote', auth, async (req, res) => {
     // Auto-apply at +5 net votes
     if (net >= 5 && status === 'pending') {
       status = 'approved';
-      // Update the actual price
-      await supabase.from('prices').upsert({
+      // Desactivar precio anterior y crear uno nuevo verificado
+      await supabase.from('prices').update({ is_active: 0 })
+        .eq('place_id', pcr.place_id).eq('product', pcr.product).eq('is_active', 1);
+      await supabase.from('prices').insert({
         place_id: pcr.place_id, product: pcr.product, price: pcr.new_price,
         unit: 'ud', reported_by: pcr.requested_by, status: 'verified',
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'place_id,product' });
+        is_active: 1, votes_up: 0, votes_down: 0,
+      });
       // Add to history
       await supabase.from('price_history').insert({
         place_id: pcr.place_id, product: pcr.product, price: pcr.new_price,
-        reported_at: new Date().toISOString(),
       });
+      // Invalidar caché de places para esa ciudad
+      const placeCity = await db.query('places', { eq: { id: pcr.place_id }, select: 'city', single: true }).catch(()=>null);
+      if (placeCity?.city) {
+        for (const [k] of _placesCache) {
+          if (k.includes(encodeURIComponent(placeCity.city))) _placesCache.delete(k);
+        }
+      }
       await addPoints(pcr.requested_by, 10, 'precio aprobado por la comunidad');
     }
     // Auto-reject at -3 net votes
