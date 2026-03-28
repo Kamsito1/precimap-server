@@ -1230,11 +1230,13 @@ app.get('/api/places', optAuth, async (req, res) => {
     const result = list.map(place => {
       let prices = (pricesByPlace[place.id] || []).slice(0, 10);
       let productPrices = product ? prices.filter(p => productMatch(product, p.product)) : prices;
-      // Para restaurantes: mostrar siempre el lugar aunque no tenga el precio específico,
-      // usar product solo para calcular repPrice. Para otras categorías: filtrar estrictamente.
+      // hasProduct: ¿tiene el producto pedido? Afecta al orden — sin él van al final
+      const hasProduct = !product || productPrices.length > 0;
+      // Para restaurantes: mostrar aunque no tenga el producto específico (van al final del sort)
+      // Para otras categorías (farmacia): excluir si no tiene el producto
       if (product && productPrices.length === 0) {
         if (place.category === 'restaurante') {
-          productPrices = prices; // fallback: usar todos sus precios
+          productPrices = prices; // fallback: usar todos sus precios (se ordenan al final)
         } else {
           return null; // farmacia sin ese medicamento → excluir
         }
@@ -1300,12 +1302,18 @@ app.get('/api/places', optAuth, async (req, res) => {
         repPrice = Math.round(repPrice * 100) / 100;
       }
 
-      return { ...place, prices, minPrice: repPrice, repPrice, repContext };
+      return { ...place, prices, minPrice: repPrice, repPrice, repContext, hasProduct };
 
     });
     const filtered = result.filter(Boolean);
     if (sort==='price') {
-      filtered.sort((a,b)=>(a.minPrice??999)-(b.minPrice??999));
+      // Primero los que tienen el producto pedido, ordenados por precio
+      // Al final los que no tienen el producto (sorted by proximity)
+      filtered.sort((a,b)=>{
+        if (a.hasProduct && !b.hasProduct) return -1;
+        if (!a.hasProduct && b.hasProduct) return 1;
+        return (a.minPrice??999)-(b.minPrice??999);
+      });
     } else if (sort==='price_proximity') {
       // Score combinado: 60% precio normalizado + 40% distancia normalizada
       const maxDist = Math.max(...filtered.map(p=>p._dist||0), 1);
