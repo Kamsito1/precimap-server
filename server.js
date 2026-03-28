@@ -1952,10 +1952,40 @@ app.post('/api/admin/run-scraper', auth, async (req, res) => {
 
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🗺️  PreciMap v3.6.0 en http://localhost:${PORT}`);
-  console.log(`🔗 Amazon afiliado: ${process.env.AMAZON_AFFILIATE_TAG}`);
-  console.log(`🤖 Scraper Amazon: activo cada 6h`);
+  console.log(`\n🗺️  PreciMap v3.7.0 en http://localhost:${PORT}`);
   console.log(`🗄️  Base de datos: Supabase (${process.env.SUPABASE_URL ? '✅ Connected' : '❌ No URL'})\n`);
+
+  // Warmup caché con las queries más frecuentes para las ciudades principales
+  setTimeout(async () => {
+    const TOP_CITIES = ['Sevilla','Córdoba','Madrid','Málaga','Granada','Barcelona'];
+    const CATS = [
+      {cat:'restaurante', product:'Café con leche', sort:'price'},
+      {cat:'restaurante', product:'Caña de cerveza', sort:'price'},
+      {cat:'restaurante', product:'Menú del día', sort:'price'},
+      {cat:'supermercado', sort:'price'},
+      {cat:'farmacia', sort:'proximity'},
+      {cat:'gimnasio', sort:'price'},
+    ];
+    let warmed = 0;
+    for (const city of TOP_CITIES) {
+      for (const {cat, product='', sort} of CATS) {
+        try {
+          const fakeReq = { query: {cat, city, product, sort, lat:'', lng:'', radius:''} };
+          // Simular la clave de caché para pre-calentar
+          const ckey = placesCacheKey(fakeReq.query);
+          if (!_placesCache.has(ckey)) {
+            // Hacer la query real y guardar en caché
+            const baseUrl = `http://localhost:${PORT}/api/places?cat=${cat}&city=${encodeURIComponent(city)}&sort=${sort}${product?`&product=${encodeURIComponent(product)}`:''}`;
+            await fetch(baseUrl).then(r=>r.json()).then(data => {
+              _placesCache.set(ckey, { data, time: Date.now() });
+              warmed++;
+            }).catch(()=>{});
+          }
+        } catch(_) {}
+      }
+    }
+    console.log(`🔥 Caché calentado: ${warmed} queries pre-cargadas`);
+  }, 3000); // 3s después de arrancar
 });
 
 
