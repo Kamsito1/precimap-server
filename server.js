@@ -761,10 +761,11 @@ app.post('/api/users/avatar', auth, upload.single('avatar'), async (req, res) =>
 
 app.patch('/api/users/me', auth, async (req, res) => {
   try {
-    const { name, bio } = req.body;
+    const { name, bio, notifications_enabled } = req.body;
     const updates = {};
     if (name?.trim()?.length >= 2) updates.name = name.trim();
     if (bio !== undefined) updates.bio = (bio||'').slice(0, 200); // max 200 chars
+    if (notifications_enabled !== undefined) updates.notifications_enabled = notifications_enabled ? 1 : 0;
     if (!Object.keys(updates).length) return fail(res, 'Nada que actualizar');
     const user = await db.update('users', req.user.id, updates);
     if (!user) return fail(res, 'Usuario no encontrado', 404);
@@ -1117,7 +1118,8 @@ app.post('/api/deals/check-duplicate', auth, async (req, res) => {
 
 app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
   try {
-    const { title, url: rawUrl, deal_price, original_price, store, category } = req.body;
+    const { title, url: rawUrl, deal_price, original_price, store, category,
+            description, discount_code, availability, store_location, starts_at, expires_at: customExpires, cover_index } = req.body;
     if (!title || !deal_price) return fail(res, 'Título y precio son obligatorios');
     // Silently replace any affiliate tag with ours — user never knows
     const url = rawUrl ? applyOurTag(rawUrl) : null;
@@ -1147,13 +1149,30 @@ app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
       } catch(_) { /* imagen base64 inválida — ignorar */ }
     }
     const disc = original_price && deal_price ? Math.round((1 - deal_price/original_price)*100) : null;
-    // Auto-expire deals after 30 days
-    const expires = new Date(Date.now() + 30 * 24 * 3600000).toISOString();
+    // Parse dates — user sends DD/MM/AAAA or ISO, handle both
+    function parseUserDate(d) {
+      if (!d || !d.trim()) return null;
+      // DD/MM/YYYY format
+      const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (m) return new Date(+m[3], +m[2]-1, +m[1]).toISOString();
+      // ISO format
+      const iso = new Date(d);
+      return isNaN(iso) ? null : iso.toISOString();
+    }
+    const parsedStarts = parseUserDate(starts_at);
+    const parsedExpires = parseUserDate(customExpires) || new Date(Date.now() + 30 * 24 * 3600000).toISOString();
     const deal = await db.insert('deals', {
       title: title.trim(), url: url||null, deal_price: parseFloat(deal_price),
       original_price: original_price ? parseFloat(original_price) : null,
       discount_percent: disc, store: autoStore, category: category||'otros',
-      image_url, reported_by: req.user.id, is_active: 1, expires_at: expires,
+      image_url, reported_by: req.user.id, is_active: 1,
+      expires_at: parsedExpires,
+      description: description || null,
+      discount_code: discount_code || null,
+      availability: availability || 'online',
+      store_location: store_location || null,
+      starts_at: parsedStarts,
+      cover_index: cover_index ? parseInt(cover_index) : 0,
     });
     await addPoints(req.user.id, 5, 'publicar chollo');
     await checkBadges(req.user.id);
@@ -1416,7 +1435,7 @@ app.get('/api/places', optAuth, async (req, res) => {
 
     // Solo los campos necesarios para la lista — más rápido que select('*')
     let q = supabase.from('places')
-      .select('id,name,category,lat,lng,address,city,hours,category_detail')
+      .select('id,name,category,lat,lng,address,city,hours,category_detail,price_range,subcategory,monthly_fee,verified_count')
       .eq('is_active', 1);
     if (cat && cat!=='all') q = q.eq('category', cat);
     const hasCity = city && city.trim() !== '';
@@ -1582,13 +1601,22 @@ app.get('/api/places', optAuth, async (req, res) => {
 
 app.post('/api/places', auth, async (req, res) => {
   try {
-    const { name, category: rawCat, lat, lng, address, city } = req.body;
+    const { name, category: rawCat, lat, lng, address, city, price_range, monthly_fee, subcategory } = req.body;
     const parsedLat = parseFloat(lat), parsedLng = parseFloat(lng);
     if (!name||!rawCat||isNaN(parsedLat)||isNaN(parsedLng)) return fail(res, 'Faltan campos obligatorios');
     // Normalizar categorías obsoletas → restaurante
     const CAT_MAP = { bar:'restaurante', cafe:'restaurante', cafeteria:'restaurante' };
     const category = CAT_MAP[rawCat] || rawCat;
-    const place = await db.insert('places', { name, category, lat: parsedLat, lng: parsedLng, address: address||'', city: city||'', created_by: req.user.id, is_active: 1 });
+    const insertData = {
+      name, category, lat: parsedLat, lng: parsedLng,
+      address: address||'', city: city||'',
+      created_by: req.user.id, is_active: 1,
+    };
+    // New optional fields
+    if (price_range && [1,2,3,4].includes(Number(price_range))) insertData.price_range = Number(price_range);
+    if (monthly_fee && !isNaN(parseFloat(monthly_fee))) insertData.monthly_fee = parseFloat(monthly_fee);
+    if (subcategory) insertData.subcategory = subcategory;
+    const place = await db.insert('places', insertData);
     await addPoints(req.user.id, 5, 'añadir lugar');
     // Invalidar caché de places para que el nuevo lugar aparezca inmediatamente
     if (city) {
@@ -2094,6 +2122,26 @@ app.post('/api/deals/:id/report-expired', auth, async (req, res) => {
     }
     await addPoints(req.user.id, 2, 'reportar oferta expirada');
     res.json({ ok: true, expire_reports: count, deactivated });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// Report deal as scam/timo
+app.post('/api/deals/:id/report-scam', auth, async (req, res) => {
+  try {
+    const dealId = parseInt(req.params.id);
+    const { reason } = req.body;
+    // Check already reported
+    const existing = await db.query('deal_reports', { eq: { deal_id: dealId, user_id: req.user.id }, single: true }).catch(()=>null);
+    if (existing) return fail(res, 'Ya has reportado este chollo');
+    await db.insert('deal_reports', { deal_id: dealId, user_id: req.user.id, reason: reason || 'timo' });
+    // Count total reports
+    const { count } = await supabase.from('deal_reports')
+      .select('*', { count: 'exact', head: true }).eq('deal_id', dealId);
+    // Auto-deactivate at 10 scam reports
+    if (count >= 10) {
+      await supabase.from('deals').update({ is_active: 0 }).eq('id', dealId);
+    }
+    res.json({ ok: true, report_count: count, deactivated: count >= 10 });
   } catch(e) { fail(res, e.message, 500); }
 });
 
