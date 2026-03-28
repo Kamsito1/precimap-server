@@ -857,8 +857,17 @@ app.get('/api/deals/trending', async (req, res) => {
       const score = (d.votes_up||0) - (d.votes_down||0);
       const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.length : 0;
       const { deal_comments, ...clean } = d;
-      return { ...clean, comment_count, hot_score: score / Math.pow(ageHours + 2, 1.5),
-        temperature: score >= 20 ? '🔥🔥🔥' : score >= 10 ? '🔥🔥' : '🔥' };
+      return {
+        ...clean,
+        comment_count,
+        hot_score: score / Math.pow(ageHours + 2, 1.5),
+        temperature: score >= 20 ? '🔥🔥🔥' : score >= 10 ? '🔥🔥' : '🔥',
+        votes_up: d.votes_up || 0,
+        votes_down: d.votes_down || 0,
+        discount_percent: d.discount_percent != null ? Number(d.discount_percent) : null,
+        deal_price: d.deal_price != null ? Number(d.deal_price) : null,
+        expire_reports: d.expire_reports || 0,
+      };
     }).sort((a,b) => b.hot_score - a.hot_score);
     res.json(trending);
   } catch(e) { fail(res, e.message, 500); }
@@ -910,7 +919,17 @@ app.get('/api/deals', optAuth, async (req, res) => {
       // Add comment_count from joined data
       const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.filter(c => !c.is_deleted).length : 0;
       const { deal_comments, ...cleanDeal } = d;
-      return { ...cleanDeal, hot_score: decayedScore, temperature: temp, temp_color: tempColor, comment_count };
+      return {
+        ...cleanDeal,
+        hot_score: decayedScore,
+        temperature: temp,
+        temp_color: tempColor,
+        comment_count,
+        images: Array.isArray(d.images) ? d.images : [],
+        votes_up: d.votes_up || 0,
+        votes_down: d.votes_down || 0,
+        expire_reports: d.expire_reports || 0,
+      };
     });
 
     if (sort === 'hot') deals.sort((a,b) => b.hot_score - a.hot_score);
