@@ -261,20 +261,22 @@ function getRankByPoints(pts) {
 
 async function addPoints(userId, points, reason) {
   try {
+    // Leer puntos actuales ANTES del RPC para calcular rank correctamente
+    const userBefore = await db.query('users', { eq: { id: userId }, select: 'points,rank_title', single: true }).catch(()=>null);
+    const prevPts = userBefore?.points || 0;
+    const prevRank = getRankByPoints(prevPts);
+
     await supabase.rpc('increment_points', { uid: userId, pts: points });
     await db.insert('notifications', { user_id: userId, type: 'points', message: `+${points} puntos por ${reason}` });
-    const user = await db.query('users', { eq: { id: userId }, single: true });
-    if (user) {
-      const newPts = (user.points || 0) + points;
-      const rank = getRankByPoints(newPts);
-      const prevRank = getRankByPoints(user.points || 0);
-      const updates = { rank_title: rank.title };
-      await db.update('users', userId, updates);
-      // Level-up notification
-      if (rank.title !== prevRank.title) {
-        await db.insert('notifications', { user_id: userId, type: 'level_up',
-          message: `🎉 ¡Has subido de nivel! Ahora eres ${rank.emoji} ${rank.title}` });
-      }
+
+    const newPts = prevPts + points;
+    const rank = getRankByPoints(newPts);
+    await db.update('users', userId, { rank_title: rank.title }).catch(()=>{});
+
+    // Level-up notification solo si realmente cambió
+    if (rank.title !== prevRank.title) {
+      await db.insert('notifications', { user_id: userId, type: 'level_up',
+        message: `🎉 ¡Has subido de nivel! Ahora eres ${rank.emoji} ${rank.title}` });
     }
   } catch {}
 }
@@ -1852,7 +1854,7 @@ app.post('/api/banks', auth, async (req, res) => {
 app.post('/api/banks/:id/vote', auth, async (req, res) => {
   try {
     const { vote } = req.body;
-    await supabase.from('bank_deals').update({ votes_up: supabase.rpc ? undefined : 0 }).eq('id', req.params.id);
+    if (vote !== 1 && vote !== -1) return fail(res, 'Voto inválido');
     await supabase.rpc('bank_vote_adjust', { bid: parseId(req.params.id), delta: vote });
     res.json({ ok: true });
   } catch(e) { fail(res, e.message); }
@@ -2124,7 +2126,7 @@ async function runScraperJob() { /* scraper deshabilitado */ }
 // Endpoint manual para admin — forzar scraper o verificación
 // Admin: re-award badges to all users (retroactive)
 app.post('/api/admin/recheck-badges', auth, async (req, res) => {
-  if (!req.user.is_admin) return fail(res, 'No autorizado', 403);
+  if (!isAdmin(req.user.email)) return fail(res, 'No autorizado', 403);
   try {
     const { data: users } = await supabase.from('users').select('id,name').eq('is_deleted', 0).limit(200);
     let count = 0;
@@ -2137,7 +2139,7 @@ app.post('/api/admin/recheck-badges', auth, async (req, res) => {
 });
 
 app.post('/api/admin/run-scraper', auth, async (req, res) => {
-  if (!req.user.is_admin) return fail(res, 'No autorizado', 403);
+  if (!isAdmin(req.user.email)) return fail(res, 'No autorizado', 403);
   const { action = 'all' } = req.body;
   runScraperJob().catch(console.error); // always run full job
   res.json({ ok: true, message: `Scraper lanzado en background (action: ${action})` });
