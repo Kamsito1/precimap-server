@@ -1113,10 +1113,11 @@ app.post('/api/deals/:id/edit', auth, async (req, res) => {
     if (deal.reported_by !== req.user.id) return fail(res, 'Sin permiso', 403);
     const { title, deal_price } = req.body;
     if (!title?.trim()) return fail(res, 'Título obligatorio');
-    if (!deal_price || isNaN(parseFloat(deal_price))) return fail(res, 'Precio inválido');
+    const parsedDealPrice = parseFloat(deal_price);
+    if (!deal_price || isNaN(parsedDealPrice) || parsedDealPrice < 0) return fail(res, 'Precio inválido');
     const updated = await db.update('deals', id, {
       title: title.trim(),
-      deal_price: parseFloat(deal_price),
+      deal_price: parsedDealPrice,
     });
     res.json(updated);
   } catch(e) { fail(res, e.message); }
@@ -1482,6 +1483,14 @@ app.post('/api/places', auth, async (req, res) => {
     const category = CAT_MAP[rawCat] || rawCat;
     const place = await db.insert('places', { name, category, lat: parseFloat(lat), lng: parseFloat(lng), address: address||'', city: city||'', created_by: req.user.id, is_active: 1 });
     await addPoints(req.user.id, 5, 'añadir lugar');
+    // Invalidar caché de places para que el nuevo lugar aparezca inmediatamente
+    if (city) {
+      for (const [k] of _placesCache) {
+        if (k.includes(`|${city}|`) || k.toLowerCase().includes(`|${(city||'').toLowerCase()}|`)) {
+          _placesCache.delete(k);
+        }
+      }
+    }
     res.json(place);
   } catch(e) { fail(res, e.message); }
 });
