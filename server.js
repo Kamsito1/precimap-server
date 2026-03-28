@@ -548,7 +548,8 @@ app.post('/api/auth/reset-password', authLimiter, async (req, res) => {
     if (!reset) return fail(res, 'Código inválido o ya usado');
     if (new Date(reset.expires_at) < new Date()) return fail(res, 'Código expirado. Solicita uno nuevo.');
     const hash = await bcrypt.hash(new_password, 12);
-    const { data: user } = await supabase.from('users').update({ password_hash: hash }).eq('email', normalizedEmail).select().single();
+    const { data: user, error: updateErr } = await supabase.from('users').update({ password_hash: hash }).eq('email', normalizedEmail).select().single();
+    if (updateErr || !user) return fail(res, 'Error al actualizar la contraseña. Intenta de nuevo.');
     await db.update('password_resets', reset.id, { used: 1 });
     const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ ok: true, token, user: { id: user.id, name: user.name, email: user.email } });
