@@ -573,6 +573,7 @@ app.get('/api/users/me', auth, async (req, res) => {
       db.count('prices', { eq: { reported_by: req.user.id, status: 'verified' } }),
       db.count('deals',  { eq: { reported_by: req.user.id } }),
     ]);
+    if (!user) return fail(res, 'Usuario no encontrado', 404);
     const { password_hash, ...safeUser } = user;
     res.json({ ...safeUser, badges: badges||[], notifications: notifs||[], stats: { reports: reportCount, verified: verifiedCount, deals: dealCount } });
   } catch(e) { fail(res, e.message, 500); }
@@ -686,6 +687,7 @@ app.patch('/api/users/me', auth, async (req, res) => {
     if (bio !== undefined) updates.bio = bio.slice(0, 200); // max 200 chars
     if (!Object.keys(updates).length) return fail(res, 'Nada que actualizar');
     const user = await db.update('users', req.user.id, updates);
+    if (!user) return fail(res, 'Usuario no encontrado', 404);
     res.json({ ok: true, user: { id: user.id, name: user.name, bio: user.bio, avatar_url: user.avatar_url } });
   } catch(e) { fail(res, e.message); }
 });
@@ -698,6 +700,8 @@ app.post('/api/users/me/change-password', auth, async (req, res) => {
     if (new_password.length < 6) return fail(res, 'Nueva contraseña mínimo 6 caracteres');
     if (current_password === new_password) return fail(res, 'La nueva contraseña debe ser diferente');
     const user = await db.query('users', { eq: { id: req.user.id }, single: true });
+    if (!user) return fail(res, 'Usuario no encontrado', 404);
+    if (!user.password_hash) return fail(res, 'Esta cuenta usa Google Sign-In — no tiene contraseña');
     const match = await bcrypt.compare(current_password, user.password_hash);
     if (!match) return fail(res, 'Contraseña actual incorrecta');
     const hash = await bcrypt.hash(new_password, 12);
@@ -711,6 +715,7 @@ app.post('/api/users/me/delete', auth, async (req, res) => {
   try {
     const { password } = req.body;
     const user = await db.query('users', { eq: { id: req.user.id }, single: true });
+    if (!user) return fail(res, 'Usuario no encontrado', 404);
     // Google Sign-In users have google_id but no real password — allow delete without password
     if (user.google_id && !password) {
       // Google user — no password needed, proceed with deletion
