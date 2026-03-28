@@ -1233,7 +1233,7 @@ app.get('/api/places', optAuth, async (req, res) => {
     if (placeIds.length > 0) {
       const { data: pricesData } = await supabase
         .from('prices')
-        .select('*, users(id,name,avatar_url)')
+        .select('place_id,product,price,reported_at,reported_by')  // sin JOIN users — más rápido para lista
         .in('place_id', placeIds)
         .eq('is_active', 1)
         .order('price', { ascending: true });
