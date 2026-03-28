@@ -1189,9 +1189,27 @@ app.get('/api/places/:id/price-history', async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
+// ─── CACHÉ para /api/places (5 minutos) ──────────────────────────────────────
+const _placesCache = new Map();
+const PLACES_CACHE_TTL = 5 * 60 * 1000;
+function placesCacheKey(q) {
+  const {cat='',city='',product='',sort='proximity',lat='',lng='',radius=''} = q;
+  return `${cat}|${city}|${product}|${sort}|${lat ? Math.round(lat*10)/10 : ''}|${lng ? Math.round(lng*10)/10 : ''}|${radius}`;
+}
+
 app.get('/api/places', optAuth, async (req, res) => {
   try {
     const { cat, lat, lng, radius, city, product, sort='proximity', search } = req.query;
+
+    // Caché solo para queries sin búsqueda de texto (search) y sin autenticación especial
+    if (!search) {
+      const ckey = placesCacheKey(req.query);
+      const cached = _placesCache.get(ckey);
+      if (cached && Date.now() - cached.time < PLACES_CACHE_TTL) {
+        return res.json(cached.data);
+      }
+    }
+
     let q = supabase.from('places').select('*').eq('is_active', 1);
     if (cat && cat!=='all') q = q.eq('category', cat);
     const hasCity = city && city.trim() !== '';
@@ -1336,7 +1354,18 @@ app.get('/api/places', optAuth, async (req, res) => {
     } else {
       filtered.sort((a,b)=>(a._dist||999)-(b._dist||999));
     }
-    res.json(filtered.slice(0,200));
+    const result_data = filtered.slice(0,200);
+    // Guardar en caché si no hay búsqueda de texto
+    if (!search) {
+      const ckey = placesCacheKey(req.query);
+      _placesCache.set(ckey, { data: result_data, time: Date.now() });
+      // Limpiar entradas viejas si el caché crece demasiado
+      if (_placesCache.size > 200) {
+        const now = Date.now();
+        for (const [k,v] of _placesCache) if (now - v.time > PLACES_CACHE_TTL) _placesCache.delete(k);
+      }
+    }
+    res.json(result_data);
   } catch(e) { fail(res, e.message, 500); }
 });
 
