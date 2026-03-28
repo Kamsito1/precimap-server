@@ -1514,6 +1514,21 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
     await db.insert('price_history', { place_id: parseInt(place_id), product: product.trim(), price: parseFloat(price) });
     await addPoints(req.user.id, 10, 'reportar precio');
     await checkBadges(req.user.id);
+    // Invalidar cachés afectados para que la siguiente petición tenga datos frescos
+    _recentCache = null;
+    _globalStatsCache = null;
+    // Invalidar caché de places para la ciudad del lugar reportado
+    const place = await db.query('places', { eq: { id: parseInt(place_id) }, select: 'city', single: true }).catch(() => null);
+    if (place?.city) {
+      const statsKey = `stats:${place.city.toLowerCase()}`;
+      _statsCache.delete(statsKey);
+      // Invalidar caché de places para esa ciudad
+      for (const [k] of _placesCache) {
+        if (k.includes(`|${place.city}|`) || k.includes(`|${encodeURIComponent(place.city)}|`)) {
+          _placesCache.delete(k);
+        }
+      }
+    }
     res.json(priceRow);
   } catch(e) { fail(res, e.message); }
 });
