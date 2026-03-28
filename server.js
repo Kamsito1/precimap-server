@@ -1431,13 +1431,13 @@ app.post('/api/prices/:id/vote', auth, async (req, res) => {
 // ─── GASOLINERAS (Ministerio de Energía) — with 10-min cache ─────────────────
 let _gasCache = null;
 let _gasCacheTime = 0;
-const GAS_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const GAS_CACHE_TTL = 30 * 60 * 1000; // 30 minutes (aumentado)
+const GAS_CACHE_STALE = 24 * 60 * 60 * 1000; // 24h — usar caché antiguo si falla la recarga
 let _gasFetching = false;
 
 async function fetchAllStations() {
   if (_gasFetching) {
-    // Wait for ongoing fetch
-    await new Promise(r => setTimeout(r, 500));
+    // Ya hay fetch en curso — devolver caché actual aunque sea viejo
     return _gasCache || [];
   }
   _gasFetching = true;
@@ -1525,11 +1525,19 @@ app.get('/api/gasolineras', async (req, res) => {
     const FUEL_KEY = { g95:'g95', g98:'g98', diesel:'diesel', diesel_plus:'diesel_plus', glp:'glp', gnc:'gnc' };
     const fuelKey = FUEL_KEY[fuel] || 'g95';
 
-    // Use cache if fresh, else fetch (with old cache as fallback)
+    // Stale-while-revalidate: devolver caché inmediatamente aunque sea viejo,
+    // y recargar en background para la siguiente petición
     let stations;
-    if (_gasCache && Date.now() - _gasCacheTime < GAS_CACHE_TTL) {
+    const cacheAge = Date.now() - _gasCacheTime;
+    if (_gasCache && cacheAge < GAS_CACHE_TTL) {
+      // Caché fresco — usar directamente
       stations = _gasCache;
+    } else if (_gasCache && cacheAge < GAS_CACHE_STALE) {
+      // Caché viejo pero usable — devolver inmediatamente y recargar en background
+      stations = _gasCache;
+      if (!_gasFetching) fetchAllStations().catch(() => {}); // reload en background
     } else {
+      // Sin caché o caché muy viejo — esperar la recarga
       stations = await fetchAllStations();
     }
 
