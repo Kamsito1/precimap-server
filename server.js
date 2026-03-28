@@ -323,7 +323,7 @@ app.get('/api/levels', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
-app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.6.0', db: 'supabase', stations: _gasCache?.length || 0 }));
+app.get('/api/health', (req, res) => res.json({ ok: true, version: '3.7.0', db: 'supabase', stations: _gasCache?.length || 0 }));
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
@@ -411,7 +411,7 @@ app.get('/api/stats', async (req, res) => {  try {
       places, prices, deals, users, events, price_history: priceHistory,
       gasolineras: _gasCache?.length || 0,
       gas_stats: gasStats,
-      version: '3.6.0',
+      version: '3.7.0',
     });
   } catch(e) { fail(res, e.message, 500); }
 });
