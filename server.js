@@ -1275,20 +1275,19 @@ app.get('/api/places', optAuth, async (req, res) => {
           repPrice = src.length > 0 ? Math.min(...src.map(p => p.price)) : null;
           repContext = repPrice ? `desde ${repPrice.toFixed(2)}€/mes` : null;
         } else if (cat === 'restaurante') {
-          // Si hay product específico (café, cerveza, menú), usar ese precio directamente
-          // Si no hay product o el bar no tiene ese precio, usar media de platos
+          // Si hay product específico (café, cerveza, menú), usar SOLO ese precio
+          // Si el bar no tiene ese precio → repPrice=null (sin precio, pero sigue en lista)
           const productFiltered = product ? prices.filter(p => productMatch(product, p.product)) : [];
           if (productFiltered.length > 0) {
-            // Precio específico del producto solicitado (café, cerveza, menú)
             repPrice = Math.min(...productFiltered.map(p => p.price));
             repContext = `${productFiltered[0].product} · ${productFiltered.length} reporte${productFiltered.length!==1?'s':''}`;
-          } else {
-            // Sin precio específico: media de platos ≥3€
-            const platos = prices.filter(p => p.price >= 3);
-            const src = platos.length >= 2 ? platos : prices;
-            repPrice = src.length > 0 ? src.reduce((a,b) => a + b.price, 0) / src.length : null;
-            repContext = repPrice ? `Media de ${src.length} plato${src.length !== 1 ? 's' : ''}` : null;
+          } else if (!product) {
+            // Sin filtro de producto: media general de todos los precios ≥1€
+            const all = prices.filter(p => p.price >= 1);
+            repPrice = all.length > 0 ? all.reduce((a,b) => a+b.price,0)/all.length : null;
+            repContext = repPrice ? `Media general · ${all.length} precios` : null;
           }
+          // Si product pero no hay match: repPrice queda null — correcto
         } else if (cat === 'farmacia') {
           // Average of real medicines (>= 1€), exclude masks/bandages
           const meds = prices.filter(p => p.price >= 1);
