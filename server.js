@@ -734,11 +734,9 @@ app.post('/api/users/me/delete', auth, async (req, res) => {
     const user = await db.query('users', { eq: { id: req.user.id }, single: true });
     if (!user) return fail(res, 'Usuario no encontrado', 404);
     // Google Sign-In users have google_id but no real password — allow delete without password
-    if (user.google_id && !password) {
-      // Google user — no password needed, proceed with deletion
-    } else {
+    if (!user.google_id) {
       if (!password) return fail(res, 'Debes confirmar tu contraseña');
-      const match = await bcrypt.compare(password, user.password_hash);
+      const match = await bcrypt.compare(password, user.password_hash || '');
       if (!match) return fail(res, 'Contraseña incorrecta');
     }
     await supabase.from('users').update({
