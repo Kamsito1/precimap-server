@@ -103,7 +103,8 @@ function normalize(s) {
 function fuzzyMatch(query, target) {
   if (!query || !target) return false;
   const q = normalize(query), t = normalize(target);
-  if (t.includes(q)) return true;
+  if (t.includes(q)) return true;      // target contiene query
+  if (q.includes(t) && t.length > 3) return true; // query contiene target (ej: "ibuprofeno 400mg" contiene "ibuprofeno")
   if (q.length > 3 && t.includes(q.slice(1))) return true;
   if (q.length >= 4) {
     function lev(a, b) {
@@ -1442,8 +1443,8 @@ app.get('/api/places', optAuth, async (req, res) => {
       // Sin precio → solo por distancia, pero después de los que tienen precio
       const withPrice = filtered.filter(p => p.hasProduct && p.minPrice > 0);
       const withoutPrice = filtered.filter(p => !p.hasProduct || !p.minPrice);
-      const maxDist = Math.max(...filtered.map(p=>p._dist||0), 1);
-      const maxPrice = Math.max(...withPrice.map(p=>p.minPrice||0), 1);
+      const maxDist = Math.max(...filtered.map(p=>p._dist||0), 1); // mínimo 1 para evitar 0/0
+      const maxPrice = Math.max(...withPrice.map(p=>p.minPrice||0), 1); // mínimo 1 para evitar 0/0
       withPrice.sort((a,b)=>{
         const sa = 0.6*(a.minPrice/maxPrice) + 0.4*((a._dist||maxDist)/maxDist);
         const sb = 0.6*(b.minPrice/maxPrice) + 0.4*((b._dist||maxDist)/maxDist);
