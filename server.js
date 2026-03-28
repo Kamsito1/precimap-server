@@ -1319,14 +1319,20 @@ app.get('/api/places', optAuth, async (req, res) => {
         return (a._dist||999) - (b._dist||999); // ambos sin precio: por cercanía
       });
     } else if (sort==='price_proximity') {
-      // Score combinado: 60% precio normalizado + 40% distancia normalizada
+      // Con precio → score combinado (60% precio + 40% distancia)
+      // Sin precio → solo por distancia, pero después de los que tienen precio
+      const withPrice = filtered.filter(p => p.hasProduct && p.minPrice > 0);
+      const withoutPrice = filtered.filter(p => !p.hasProduct || !p.minPrice);
       const maxDist = Math.max(...filtered.map(p=>p._dist||0), 1);
-      const maxPrice = Math.max(...filtered.map(p=>p.minPrice||0), 1);
-      filtered.sort((a,b)=>{
-        const sa = 0.6*(a.minPrice||maxPrice)/maxPrice + 0.4*(a._dist||maxDist)/maxDist;
-        const sb = 0.6*(b.minPrice||maxPrice)/maxPrice + 0.4*(b._dist||maxDist)/maxDist;
+      const maxPrice = Math.max(...withPrice.map(p=>p.minPrice||0), 1);
+      withPrice.sort((a,b)=>{
+        const sa = 0.6*(a.minPrice/maxPrice) + 0.4*((a._dist||maxDist)/maxDist);
+        const sb = 0.6*(b.minPrice/maxPrice) + 0.4*((b._dist||maxDist)/maxDist);
         return sa - sb;
       });
+      withoutPrice.sort((a,b)=>(a._dist||999)-(b._dist||999));
+      filtered.length = 0;
+      filtered.push(...withPrice, ...withoutPrice);
     } else {
       filtered.sort((a,b)=>(a._dist||999)-(b._dist||999));
     }
