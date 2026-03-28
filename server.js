@@ -1337,7 +1337,8 @@ const _placesCache = new Map();
 const PLACES_CACHE_TTL = 5 * 60 * 1000;
 function placesCacheKey(q) {
   const {cat='',city='',product='',sort='proximity',lat='',lng='',radius=''} = q;
-  return `${cat}|${city}|${product}|${sort}|${lat ? Math.round(lat*10)/10 : ''}|${lng ? Math.round(lng*10)/10 : ''}|${radius}`;
+  const enc = s => encodeURIComponent(s||'');
+  return `${enc(cat)}|${enc(city)}|${enc(product)}|${enc(sort)}|${lat ? Math.round(lat*10)/10 : ''}|${lng ? Math.round(lng*10)/10 : ''}|${enc(radius)}`;
 }
 
 app.get('/api/places', optAuth, async (req, res) => {
@@ -1984,7 +1985,7 @@ app.post('/api/alerts', auth, async (req, res) => {
   try {
     const { place_id, product, target_price } = req.body;
     if (!product) return fail(res, 'Producto requerido');
-    const alert = await db.insert('price_alerts', { user_id: req.user.id, place_id: place_id||null, product, target_price: target_price?parseFloat(target_price):null, is_active: 1 });
+    const alert = await db.insert('price_alerts', { user_id: req.user.id, place_id: place_id||null, product, target_price: target_price ? (parseFloat(target_price)||null) : null, is_active: 1 });
     res.json(alert);
   } catch(e) { fail(res, e.message); }
 });
