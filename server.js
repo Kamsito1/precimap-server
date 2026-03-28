@@ -1433,6 +1433,31 @@ app.post('/api/places', auth, async (req, res) => {
 });
 
 // ─── PRICES ───────────────────────────────────────────────────────────────────
+
+// Feed de actividad — últimos precios reportados por la comunidad
+app.get('/api/prices/recent', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit)||20, 50);
+    const { data, error } = await supabase.from('prices')
+      .select('id,product,price,reported_at,places!inner(id,name,city,category)')
+      .eq('is_active',1)
+      .order('reported_at',{ascending:false})
+      .limit(limit);
+    if (error) throw error;
+    const result = (data||[]).map(p => ({
+      id: p.id,
+      product: p.product,
+      price: p.price,
+      reported_at: p.reported_at,
+      place_id: p.places?.id,
+      place_name: p.places?.name,
+      city: p.places?.city,
+      category: p.places?.category,
+    }));
+    res.json(result);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
   try {
     const { place_id, product, price, unit } = req.body;
