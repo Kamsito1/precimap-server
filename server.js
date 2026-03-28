@@ -866,7 +866,7 @@ app.get('/api/deals/trending', async (req, res) => {
       .eq('is_active', 1).gte('detected_at', since).order('votes_up', { ascending: false }).limit(5);
     if (error) throw error;
     const trending = (data||[]).map(d => {
-      const ageHours = (Date.now() - new Date(d.detected_at)) / 3600000;
+      const ageHours = d.detected_at ? Math.max(0, (Date.now() - new Date(d.detected_at)) / 3600000) : 24;
       const score = (d.votes_up||0) - (d.votes_down||0);
       const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.length : 0;
       const { deal_comments, ...clean } = d;
@@ -1144,7 +1144,15 @@ app.get('/api/deals/:id', async (req, res) => {
       .eq('is_active', 1)
       .single();
     if (error || !data) return fail(res, 'Deal not found', 404);
-    res.json(data);
+    res.json({
+      ...data,
+      images: Array.isArray(data.images) ? data.images : [],
+      votes_up: data.votes_up || 0,
+      votes_down: data.votes_down || 0,
+      expire_reports: data.expire_reports || 0,
+      deal_price: data.deal_price != null ? Number(data.deal_price) : null,
+      discount_percent: data.discount_percent != null ? Number(data.discount_percent) : null,
+    });
   } catch(e) { fail(res, e.message, 500); }
 });
 
