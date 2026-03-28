@@ -796,8 +796,8 @@ app.post('/api/users/me/delete', auth, async (req, res) => {
     const { password } = req.body;
     const user = await db.query('users', { eq: { id: req.user.id }, single: true });
     if (!user) return fail(res, 'Usuario no encontrado', 404);
-    // Google Sign-In users have google_id but no real password — allow delete without password
-    if (!user.google_id) {
+    // Google/Apple Sign-In users have no real password — allow delete without password
+    if (!user.google_id && !user.apple_id) {
       if (!password) return fail(res, 'Debes confirmar tu contraseña');
       const match = await bcrypt.compare(password, user.password_hash || '');
       if (!match) return fail(res, 'Contraseña incorrecta');
@@ -806,7 +806,7 @@ app.post('/api/users/me/delete', auth, async (req, res) => {
       name: '[Usuario eliminado]',
       email: `deleted_${req.user.id}_${Date.now()}@deleted.com`,
       password_hash: '', avatar_url: null, bio: null, is_deleted: 1,
-      google_id: null,
+      google_id: null, apple_id: null,
     }).eq('id', req.user.id);
     await supabase.from('notifications').delete().eq('user_id', req.user.id);
     await supabase.from('price_alerts').delete().eq('user_id', req.user.id);
@@ -819,17 +819,23 @@ app.post('/api/users/me/delete', auth, async (req, res) => {
 app.delete('/api/users/me', auth, async (req, res) => {
   try {
     const { password } = req.body;
-    if (!password) return fail(res, 'Debes confirmar tu contraseña');
     const user = await db.query('users', { eq: { id: req.user.id }, single: true });
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return fail(res, 'Contraseña incorrecta');
+    if (!user) return fail(res, 'Usuario no encontrado', 404);
+    // Google/Apple users — no password needed
+    if (!user.google_id && !user.apple_id) {
+      if (!password) return fail(res, 'Debes confirmar tu contraseña');
+      const match = await bcrypt.compare(password, user.password_hash || '');
+      if (!match) return fail(res, 'Contraseña incorrecta');
+    }
     await supabase.from('users').update({
       name: '[Usuario eliminado]',
       email: `deleted_${req.user.id}_${Date.now()}@deleted.com`,
       password_hash: '', avatar_url: null, bio: null, is_deleted: 1,
+      google_id: null, apple_id: null,
     }).eq('id', req.user.id);
     await supabase.from('notifications').delete().eq('user_id', req.user.id);
     await supabase.from('price_alerts').delete().eq('user_id', req.user.id);
+    await supabase.from('favorite_stations').delete().eq('user_id', req.user.id);
     res.json({ ok: true });
   } catch(e) { fail(res, e.message); }
 });
