@@ -1210,7 +1210,10 @@ app.get('/api/places', optAuth, async (req, res) => {
       }
     }
 
-    let q = supabase.from('places').select('*').eq('is_active', 1);
+    // Solo los campos necesarios para la lista — más rápido que select('*')
+    let q = supabase.from('places')
+      .select('id,name,category,lat,lng,address,city,hours,category_detail')
+      .eq('is_active', 1);
     if (cat && cat!=='all') q = q.eq('category', cat);
     const hasCity = city && city.trim() !== '';
     // Filtrar por campo city exacto (ilike para acentos) — NO por address para evitar falsos positivos
