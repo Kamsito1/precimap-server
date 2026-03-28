@@ -412,8 +412,12 @@ app.get('/api/stats', async (req, res) => {  try {
       return res.set('Cache-Control','public,max-age=60').json(_globalStatsCache);
     }
     const [places, prices, deals, users, events, priceHistory] = await Promise.all([
-      db.count('places'), db.count('prices'), db.count('deals'),
-      db.count('users'),  db.count('events'), db.count('price_history'),
+      supabase.from('places').select('*',{count:'exact',head:true}).eq('is_active',1).then(r=>r.count||0),
+      supabase.from('prices').select('*',{count:'exact',head:true}).eq('is_active',1).then(r=>r.count||0),
+      supabase.from('deals').select('*',{count:'exact',head:true}).eq('is_active',1).then(r=>r.count||0),
+      supabase.from('users').select('*',{count:'exact',head:true}).eq('is_deleted',0).then(r=>r.count||0),
+      supabase.from('events').select('*',{count:'exact',head:true}).eq('is_active',1).then(r=>r.count||0),
+      db.count('price_history'),
     ]);
     // Gas price stats from cache
     const gasStats = {};
@@ -1083,7 +1087,6 @@ app.post('/api/deals/:id/vote', auth, async (req, res) => {
     if (existing) {
       if (existing.vote === vote) { // undo vote
         await db.delete('deal_votes', existing.id);
-        await supabase.from('deals').update({ votes_up: supabase.rpc ? undefined : 0 }).eq('id', dealId);
         await supabase.rpc('deal_vote_adjust', { did: dealId, delta: -vote });
       } else { // change vote
         await db.update('deal_votes', existing.id, { vote });
@@ -1250,7 +1253,7 @@ app.get('/api/places/:id/price-history', async (req, res) => {
     const byProduct = {};
     (data||[]).forEach(r => {
       if (!byProduct[r.product]) byProduct[r.product] = [];
-      byProduct[r.product].push({ date: r.reported_at?.split('T')[0], price: r.price });
+      byProduct[r.product].push({ date: r.reported_at ? r.reported_at.split('T')[0] : null, price: r.price != null ? Number(r.price) : null });
     });
     res.json({ place_id: placeId, history: byProduct, total: data?.length || 0 });
   } catch(e) { fail(res, e.message, 500); }
