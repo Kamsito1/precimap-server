@@ -1565,6 +1565,9 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
         if (!upErr) { const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p); photo_url = publicUrl; fs.unlinkSync(req.file.path); }
       } catch { photo_url = `/public/uploads/${req.file.filename}`; }
     }
+    // Verificar que el lugar existe antes de insertar
+    const placeExists = await supabase.from('places').select('id').eq('id', parseInt(place_id)).eq('is_active',1).single();
+    if (!placeExists.data) return fail(res, 'El lugar no existe o no está activo');
     // Deactivate old price for same product+place
     await supabase.from('prices').update({ is_active: 0 }).eq('place_id', parseInt(place_id)).eq('product', product.trim()).eq('reported_by', req.user.id);
     const priceRow = await db.insert('prices', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice, unit: unit||'unidad', reported_by: req.user.id, photo_url, status: 'pending', votes_up: 0, votes_down: 0, is_active: 1 });
