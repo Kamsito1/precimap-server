@@ -1057,10 +1057,14 @@ app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
       } catch { image_url = `/public/uploads/${req.file.filename}`; }
     }
     if (!image_url && req.body.image_base64) {
-      const buf = Buffer.from(req.body.image_base64, 'base64');
-      const filename = `${Date.now()}.jpg`;
-      fs.writeFileSync(path.join(uploadDir, filename), buf);
-      image_url = `/public/uploads/${filename}`;
+      try {
+        const buf = Buffer.from(req.body.image_base64, 'base64');
+        if (buf.length > 0 && buf.length < 8 * 1024 * 1024) { // max 8MB
+          const filename = `${Date.now()}.jpg`;
+          fs.writeFileSync(path.join(uploadDir, filename), buf);
+          image_url = `/public/uploads/${filename}`;
+        }
+      } catch(_) { /* imagen base64 inválida — ignorar */ }
     }
     const disc = original_price && deal_price ? Math.round((1 - deal_price/original_price)*100) : null;
     // Auto-expire deals after 30 days
@@ -1192,7 +1196,7 @@ app.post('/api/deals/:id/comments', auth, async (req, res) => {
     // Notify deal author
     const deal = await db.query('deals', { eq: { id: req.params.id }, select: 'reported_by,title', single: true });
     if (deal && deal.reported_by !== req.user.id) {
-      await db.insert('notifications', { user_id: deal.reported_by, type: 'comment', message: `💬 ${req.user.name} comentó en tu chollo "${deal.title.slice(0,30)}"` });
+      await db.insert('notifications', { user_id: deal.reported_by, type: 'comment', message: `💬 ${req.user.name} comentó en tu chollo "${(deal.title||'').slice(0,30)}"` });
     }
     const full = await supabase.from('deal_comments').select('*, users(id,name,avatar_url)').eq('id', comment.id).single();
     res.json(full.data);
@@ -2191,7 +2195,8 @@ app.listen(PORT, () => {
           if (!_placesCache.has(ckey)) {
             // Hacer la query real y guardar en caché
             const baseUrl = `http://localhost:${PORT}/api/places?cat=${cat}&city=${encodeURIComponent(city)}&sort=${sort}${product?`&product=${encodeURIComponent(product)}`:''}`;
-            await fetch(baseUrl).then(r=>r.json()).then(data => {
+            const ctrl = new AbortController(); setTimeout(()=>ctrl.abort(), 8000);
+            await fetch(baseUrl, {signal:ctrl.signal}).then(r=>r.json()).then(data => {
               _placesCache.set(ckey, { data, time: Date.now() });
               warmed++;
             }).catch(()=>{});
@@ -2208,7 +2213,8 @@ app.listen(PORT, () => {
       try {
         const ckey = `stats:${city.toLowerCase()}`;
         if (!_statsCache.has(ckey)) {
-          await fetch(`http://localhost:${PORT}/api/places/stats?city=${encodeURIComponent(city)}`)
+          const ctrl2 = new AbortController(); setTimeout(()=>ctrl2.abort(), 8000);
+          await fetch(`http://localhost:${PORT}/api/places/stats?city=${encodeURIComponent(city)}`, {signal:ctrl2.signal})
             .then(r=>r.json()).then(data => {
               _statsCache.set(ckey, { data, time: Date.now() });
               statsWarmed++;
