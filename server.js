@@ -1607,6 +1607,7 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
 app.post('/api/prices/:id/vote', auth, async (req, res) => {
   try {
     const { vote } = req.body;
+    if (![1,-1].includes(vote)) return fail(res, 'Voto inválido');
     const pid = parseId(req.params.id);
     if (!pid) return fail(res, "ID inválido", 400);
     await supabase.rpc('price_vote_adjust', { pid, delta: vote });
