@@ -913,7 +913,7 @@ app.get('/api/deals', optAuth, async (req, res) => {
     if (error) throw error;
 
     const deals = (data || []).map(d => {
-      const ageHours = (Date.now() - new Date(d.detected_at)) / 3600000;
+      const ageHours = d.detected_at ? Math.max(0, (Date.now() - new Date(d.detected_at)) / 3600000) : 24;
       const score = (d.votes_up||0) - (d.votes_down||0);
       const decayedScore = score / Math.pow(ageHours + 2, 1.5);
       let temp, tempColor;
@@ -1522,6 +1522,10 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
   try {
     const { place_id, product, price, unit } = req.body;
     if (!place_id||!product||!price) return fail(res, 'Faltan campos');
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) return fail(res, 'Precio inválido');
+    if (parsedPrice > 500) return fail(res, 'El precio parece demasiado alto (máx 500€)');
+    if (product.trim().length < 2) return fail(res, 'El nombre del producto es demasiado corto');
     let photo_url = null;
     if (req.file) {
       try {
@@ -1533,10 +1537,10 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
       } catch { photo_url = `/public/uploads/${req.file.filename}`; }
     }
     // Deactivate old price for same product+place
-    await supabase.from('prices').update({ is_active: 0 }).eq('place_id', parseInt(place_id)).eq('product', product).eq('reported_by', req.user.id);
-    const priceRow = await db.insert('prices', { place_id: parseInt(place_id), product: product.trim(), price: parseFloat(price), unit: unit||'unidad', reported_by: req.user.id, photo_url, status: 'pending', votes_up: 0, votes_down: 0, is_active: 1 });
+    await supabase.from('prices').update({ is_active: 0 }).eq('place_id', parseInt(place_id)).eq('product', product.trim()).eq('reported_by', req.user.id);
+    const priceRow = await db.insert('prices', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice, unit: unit||'unidad', reported_by: req.user.id, photo_url, status: 'pending', votes_up: 0, votes_down: 0, is_active: 1 });
     // Save to price_history
-    await db.insert('price_history', { place_id: parseInt(place_id), product: product.trim(), price: parseFloat(price) });
+    await db.insert('price_history', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice });
     await addPoints(req.user.id, 10, 'reportar precio');
     await checkBadges(req.user.id);
     // Invalidar cachés afectados para que la siguiente petición tenga datos frescos
