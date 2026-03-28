@@ -193,7 +193,11 @@ const db = {
     if (options.limit)  q = q.limit(options.limit);
     if (options.single) q = q.single();
     const { data, error } = await q;
-    if (error) throw error;
+    // PGRST116 = no rows found with .single() — return null instead of throwing
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw error;
+    }
     return data;
   },
   async insert(table, row) {
