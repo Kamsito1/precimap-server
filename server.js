@@ -1374,8 +1374,11 @@ app.get('/api/places', optAuth, async (req, res) => {
 
 app.post('/api/places', auth, async (req, res) => {
   try {
-    const { name, category, lat, lng, address, city } = req.body;
-    if (!name||!category||!lat||!lng) return fail(res, 'Faltan campos obligatorios');
+    const { name, category: rawCat, lat, lng, address, city } = req.body;
+    if (!name||!rawCat||!lat||!lng) return fail(res, 'Faltan campos obligatorios');
+    // Normalizar categorías obsoletas → restaurante
+    const CAT_MAP = { bar:'restaurante', cafe:'restaurante', cafeteria:'restaurante' };
+    const category = CAT_MAP[rawCat] || rawCat;
     const place = await db.insert('places', { name, category, lat: parseFloat(lat), lng: parseFloat(lng), address: address||'', city: city||'', created_by: req.user.id, is_active: 1 });
     await addPoints(req.user.id, 5, 'añadir lugar');
     res.json(place);
