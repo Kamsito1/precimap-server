@@ -1190,10 +1190,21 @@ app.get('/api/places/:id/price-history', async (req, res) => {
 });
 
 // ─── STATS DE PRECIOS POR CIUDAD ─────────────────────────────────────────────
+// ─── CACHÉ para /api/places/stats ────────────────────────────────────────────
+const _statsCache = new Map();
+const STATS_CACHE_TTL = 10 * 60 * 1000; // 10 minutos
+
 app.get('/api/places/stats', async (req, res) => {
   try {
     const { city } = req.query;
     if (!city) return fail(res, 'city requerida', 400);
+
+    // Caché por ciudad
+    const ckey = `stats:${city.toLowerCase()}`;
+    const cached = _statsCache.get(ckey);
+    if (cached && Date.now() - cached.time < STATS_CACHE_TTL) {
+      return res.json(cached.data);
+    }
 
     // Precios mínimos por categoría en esta ciudad
     const { data: places } = await supabase.from('places')
@@ -1219,7 +1230,9 @@ app.get('/api/places/stats', async (req, res) => {
     });
     Object.values(stats).forEach(s => { s.avg = Math.round(s.sum/s.count*100)/100; delete s.sum; });
 
-    res.json({ city, places: places.length, prices: prices?.length || 0, stats });
+    const result = { city, places: places.length, prices: prices?.length || 0, stats };
+    _statsCache.set(ckey, { data: result, time: Date.now() });
+    res.json(result);
   } catch(e) { fail(res, e.message, 500); }
 });
 
@@ -2033,7 +2046,24 @@ app.listen(PORT, () => {
       }
     }
     console.log(`🔥 Caché calentado: ${warmed} queries pre-cargadas`);
-  }, 3000); // 3s después de arrancar
+
+    // Calentar también el caché de stats para las ciudades top
+    const TOP_STATS = ['Sevilla','Córdoba','Madrid','Málaga','Granada','Barcelona','Valencia','Zaragoza'];
+    let statsWarmed = 0;
+    for (const city of TOP_STATS) {
+      try {
+        const ckey = `stats:${city.toLowerCase()}`;
+        if (!_statsCache.has(ckey)) {
+          await fetch(`http://localhost:${PORT}/api/places/stats?city=${encodeURIComponent(city)}`)
+            .then(r=>r.json()).then(data => {
+              _statsCache.set(ckey, { data, time: Date.now() });
+              statsWarmed++;
+            }).catch(()=>{});
+        }
+      } catch(_) {}
+    }
+    console.log(`📊 Stats caché: ${statsWarmed} ciudades pre-cargadas`);
+  }, 3000);
 });
 
 
