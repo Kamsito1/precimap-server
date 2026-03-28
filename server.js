@@ -1232,6 +1232,7 @@ app.get('/api/places/stats', async (req, res) => {
 
     const result = { city, places: places.length, prices: prices?.length || 0, stats };
     _statsCache.set(ckey, { data: result, time: Date.now() });
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
     res.json(result);
   } catch(e) { fail(res, e.message, 500); }
 });
@@ -1415,6 +1416,8 @@ app.get('/api/places', optAuth, async (req, res) => {
         for (const [k,v] of _placesCache) if (now - v.time > PLACES_CACHE_TTL) _placesCache.delete(k);
       }
     }
+    // Cache-Control: cliente puede cachear 2 minutos, CDN/proxy 5 minutos
+    res.set('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
     res.json(result_data);
   } catch(e) { fail(res, e.message, 500); }
 });
@@ -1454,6 +1457,7 @@ app.get('/api/prices/recent', async (req, res) => {
       city: p.places?.city,
       category: p.places?.category,
     }));
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
     res.json(result);
   } catch(e) { fail(res, e.message, 500); }
 });
