@@ -402,11 +402,11 @@ app.get('/api/tips', (req, res) => {
   res.json(tips);
 });
 
-let _statsCache = null, _statsCacheTime = 0;
+let _globalStatsCache = null, _globalStatsCacheTime = 0;
 app.get('/api/stats', async (req, res) => {  try {
     // Caché 2 minutos para stats — cambian lentamente
-    if (_statsCache && Date.now() - _statsCacheTime < 2*60*1000) {
-      return res.set('Cache-Control','public,max-age=60').json(_statsCache);
+    if (_globalStatsCache && Date.now() - _globalStatsCacheTime < 2*60*1000) {
+      return res.set('Cache-Control','public,max-age=60').json(_globalStatsCache);
     }
     const [places, prices, deals, users, events, priceHistory] = await Promise.all([
       db.count('places'), db.count('prices'), db.count('deals'),
@@ -426,7 +426,7 @@ app.get('/api/stats', async (req, res) => {  try {
       gas_stats: gasStats,
       version: '3.8.0',
     };
-    _statsCache = result; _statsCacheTime = Date.now();
+    _globalStatsCache = result; _globalStatsCacheTime = Date.now();
     res.set('Cache-Control','public,max-age=60').json(result);
   } catch(e) { fail(res, e.message, 500); }
 });
