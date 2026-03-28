@@ -207,7 +207,10 @@ const db = {
   },
   async update(table, id, changes) {
     const { data, error } = await supabase.from(table).update(changes).eq('id', id).select().single();
-    if (error) throw error;
+    if (error) {
+      if (error.code === 'PGRST116') return null; // no row found — not an error
+      throw error;
+    }
     return data;
   },
   async upsert(table, row, conflict) {
