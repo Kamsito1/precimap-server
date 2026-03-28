@@ -1536,7 +1536,7 @@ app.post('/api/places', auth, async (req, res) => {
     // Invalidar caché de places para que el nuevo lugar aparezca inmediatamente
     if (city) {
       for (const [k] of _placesCache) {
-        if (k.includes(`|${city}|`) || k.toLowerCase().includes(`|${(city||'').toLowerCase()}|`)) {
+        if (k.includes(`|${encodeURIComponent(city)}|`) || k.includes(`|${city}|`)) {
           _placesCache.delete(k);
         }
       }
