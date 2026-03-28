@@ -1446,9 +1446,15 @@ app.post('/api/places', auth, async (req, res) => {
 // ─── PRICES ───────────────────────────────────────────────────────────────────
 
 // Feed de actividad — últimos precios reportados por la comunidad
+let _recentCache = null, _recentCacheTime = 0;
 app.get('/api/prices/recent', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit)||20, 50);
+    // Caché 2 minutos para prices/recent
+    if (_recentCache && Date.now() - _recentCacheTime < 2*60*1000) {
+      res.set('Cache-Control','public, max-age=60, stale-while-revalidate=120');
+      return res.json(_recentCache.slice(0, limit));
+    }
     const { data, error } = await supabase.from('prices')
       .select('id,product,price,reported_at,places!inner(id,name,city,category)')
       .eq('is_active',1)
@@ -1465,8 +1471,9 @@ app.get('/api/prices/recent', async (req, res) => {
       city: p.places?.city,
       category: p.places?.category,
     }));
+    _recentCache = result; _recentCacheTime = Date.now();
     res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
-    res.json(result);
+    res.json(result.slice(0, limit));
   } catch(e) { fail(res, e.message, 500); }
 });
 
@@ -2100,6 +2107,9 @@ app.listen(PORT, () => {
       } catch(_) {}
     }
     console.log(`📊 Stats caché: ${statsWarmed} ciudades pre-cargadas`);
+
+    // Calentar prices/recent (sin caché propio, pero la query de Supabase es rápida si se ejecuta una vez)
+    fetch(`http://localhost:${PORT}/api/prices/recent?limit=20`).catch(()=>{});
   }, 3000);
 });
 
