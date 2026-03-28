@@ -711,7 +711,7 @@ app.patch('/api/users/me', auth, async (req, res) => {
     const { name, bio } = req.body;
     const updates = {};
     if (name?.trim()?.length >= 2) updates.name = name.trim();
-    if (bio !== undefined) updates.bio = bio.slice(0, 200); // max 200 chars
+    if (bio !== undefined) updates.bio = (bio||'').slice(0, 200); // max 200 chars
     if (!Object.keys(updates).length) return fail(res, 'Nada que actualizar');
     const user = await db.update('users', req.user.id, updates);
     if (!user) return fail(res, 'Usuario no encontrado', 404);
@@ -1601,7 +1601,8 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
     await supabase.from('prices').update({ is_active: 0 }).eq('place_id', parseInt(place_id)).eq('product', product.trim()).eq('reported_by', req.user.id);
     const priceRow = await db.insert('prices', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice, unit: unit||'unidad', reported_by: req.user.id, photo_url, status: 'pending', votes_up: 0, votes_down: 0, is_active: 1 });
     // Save to price_history
-    await db.insert('price_history', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice });
+    if (parsedPrice > 0 && parsedPrice <= 500)
+      await db.insert('price_history', { place_id: parseInt(place_id), product: product.trim(), price: parsedPrice });
     await addPoints(req.user.id, 10, 'reportar precio');
     await checkBadges(req.user.id);
     // Actualizar last_report_date y streak al reportar precio
