@@ -441,7 +441,7 @@ app.get('/api/stats', async (req, res) => {  try {
     if (_gasCache?.length) {
       ['g95','g98','diesel','dieselPlus','glp','gnc'].forEach(fuel => {
         const vals = _gasCache.map(s => s.prices?.[fuel]).filter(v => v && v > 0);
-        if (vals.length) gasStats[fuel] = { min: Math.min(...vals), avg: vals.reduce((a,b)=>a+b,0)/vals.length, max: Math.max(...vals) };
+        if (vals.length) gasStats[fuel] = { min: vals.reduce((a,b)=>Math.min(a,b), Infinity), avg: vals.reduce((a,b)=>a+b,0)/vals.length, max: vals.reduce((a,b)=>Math.max(a,b), -Infinity) };
       });
     }
     const result = {
@@ -871,7 +871,7 @@ app.get('/api/leaderboard', async (req, res) => {
     if (error) throw error;
 
     const userIds = (data || []).map(u => u.id);
-    const { data: reportCounts } = await supabase.from('prices').select('reported_by').in('reported_by', userIds);
+    const { data: reportCounts } = await supabase.from('prices').select('reported_by').in('reported_by', userIds).limit(5000);
     const countMap = {};
     (reportCounts || []).forEach(r => { countMap[r.reported_by] = (countMap[r.reported_by] || 0) + 1; });
 
@@ -1416,7 +1416,7 @@ app.get('/api/places', optAuth, async (req, res) => {
       if (prices.length > 0) {
         const cat = place.category;
         if (cat === 'gasolinera') {
-          repPrice = Math.min(...prices.map(p => p.price));
+          repPrice = Math.min(...prices.map(p => p.price));  // gasolineras: array pequeño
           repContext = `${prices.length} carburantes`;
         } else if (cat === 'supermercado') {
           // Weekly basket using median price (more robust vs outliers like olive oil)
@@ -1439,14 +1439,14 @@ app.get('/api/places', optAuth, async (req, res) => {
             p.product?.toLowerCase().includes('cuota')
           ));
           const src = fees.length > 0 ? fees : prices.filter(p => p.price > 5);
-          repPrice = src.length > 0 ? Math.min(...src.map(p => p.price)) : null;
+          repPrice = src.length > 0 ? src.reduce((m,p) => Math.min(m, p.price), Infinity) : null;
           repContext = repPrice ? `desde ${repPrice.toFixed(2)}€/mes` : null;
         } else if (cat === 'restaurante') {
           // Si hay product específico (café, cerveza, menú), usar SOLO ese precio
           // Si el bar no tiene ese precio → repPrice=null (sin precio, pero sigue en lista)
           const productFiltered = product ? prices.filter(p => productMatch(product, p.product)) : [];
           if (productFiltered.length > 0) {
-            repPrice = Math.min(...productFiltered.map(p => p.price));
+            repPrice = productFiltered.reduce((m,p) => Math.min(m, p.price), Infinity);
             repContext = `${productFiltered[0].product} · ${productFiltered.length} reporte${productFiltered.length!==1?'s':''}`;
           } else if (!product) {
             // Sin filtro de producto: media general de todos los precios ≥1€
@@ -1490,8 +1490,8 @@ app.get('/api/places', optAuth, async (req, res) => {
       // Sin precio → solo por distancia, pero después de los que tienen precio
       const withPrice = filtered.filter(p => p.hasProduct && p.minPrice > 0);
       const withoutPrice = filtered.filter(p => !p.hasProduct || !p.minPrice);
-      const maxDist = Math.max(...filtered.map(p=>p._dist||0), 1); // mínimo 1 para evitar 0/0
-      const maxPrice = Math.max(...withPrice.map(p=>p.minPrice||0), 1); // mínimo 1 para evitar 0/0
+      const maxDist  = filtered.reduce((m,p) => Math.max(m, p._dist||0), 1);
+      const maxPrice = withPrice.reduce((m,p) => Math.max(m, p.minPrice||0), 1);
       withPrice.sort((a,b)=>{
         const sa = 0.6*(a.minPrice/maxPrice) + 0.4*((a._dist||maxDist)/maxDist);
         const sb = 0.6*(b.minPrice/maxPrice) + 0.4*((b._dist||maxDist)/maxDist);
