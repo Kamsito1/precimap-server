@@ -312,6 +312,19 @@ async function checkBadges(userId) {
     const { data: viralDeals } = await supabase.from('deals').select('id')
       .eq('reported_by', userId).gte('votes_up', 50).limit(1);
     if (viralDeals?.length > 0) await award('chollo_viral', def.chollo_viral.name, def.chollo_viral.pts);
+    // Madrugador: precio reportado antes de las 8am
+    const { data: earlyPrices } = await supabase.from('prices')
+      .select('reported_at').eq('reported_by', userId).eq('is_active',1).limit(200);
+    const hasEarly = (earlyPrices||[]).some(p => {
+      const h = new Date(p.reported_at).getHours();
+      return h >= 0 && h < 8;
+    });
+    if (hasEarly) await award('madrugador', def.madrugador.name, def.madrugador.pts);
+    // Explorador: reportar en 5+ ciudades distintas
+    const { data: cityPrices } = await supabase.from('prices')
+      .select('places!inner(city)').eq('reported_by', userId).eq('is_active',1).limit(500);
+    const cities = new Set((cityPrices||[]).map(p => p.places?.city).filter(Boolean));
+    if (cities.size >= 5) await award('explorador', def.explorador.name, def.explorador.pts);
   } catch {}
 }
 
