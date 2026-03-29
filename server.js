@@ -1059,6 +1059,13 @@ app.post('/api/notifications/read', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+app.post('/api/notifications/:id/read', auth, async (req, res) => {
+  try {
+    await supabase.from('notifications').update({ is_read: 1 }).eq('id', parseInt(req.params.id)).eq('user_id', req.user.id);
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message); }
+});
+
 // ─── LEADERBOARD — with real period filter, no N+1 ───────────────────────────
 const _leaderCache = new Map(); // key: period, val: {data, time}
 app.get('/api/leaderboard', async (req, res) => {
