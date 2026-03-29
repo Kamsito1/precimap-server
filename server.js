@@ -1302,7 +1302,7 @@ app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
       return isNaN(iso) ? null : iso.toISOString();
     }
     const parsedStarts = parseUserDate(starts_at);
-    const parsedExpires = parseUserDate(customExpires) || new Date(Date.now() + 30 * 24 * 3600000).toISOString();
+    const parsedExpires = parseUserDate(customExpires) || null;
     const deal = await db.insert('deals', {
       title: title.trim(), url: url||null, deal_price: parseFloat(deal_price),
       original_price: original_price ? parseFloat(original_price) : null,
@@ -1345,6 +1345,24 @@ app.post('/api/deals/:id/images', auth, upload.single('image'), async (req, res)
           fs.unlinkSync(req.file.path);
         }
       } catch { image_url = `/public/uploads/${req.file.filename}`; }
+    }
+    // Support base64 upload (from React Native)
+    if (!image_url && req.body.image_base64) {
+      try {
+        const buf = Buffer.from(req.body.image_base64, 'base64');
+        if (buf.length > 0 && buf.length < 8 * 1024 * 1024) {
+          const p = `deals/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+          const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: 'image/jpeg' });
+          if (!upErr) {
+            const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
+            image_url = publicUrl;
+          } else {
+            const filename = `${Date.now()}.jpg`;
+            fs.writeFileSync(path.join(uploadDir, filename), buf);
+            image_url = `/public/uploads/${filename}`;
+          }
+        }
+      } catch(_) {}
     }
     if (!image_url) return fail(res, 'No se pudo subir la imagen');
     const newImages = [...currentImages, image_url];
