@@ -59,6 +59,56 @@ app.use(helmet({ contentSecurityPolicy: false })); // security headers (CSP disa
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
+// Share deal page — Open Graph for WhatsApp/Telegram previews
+app.get('/chollo/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.redirect('/');
+    const { data: deal } = await supabase.from('deals').select('*').eq('id', id).eq('is_active', 1).single();
+    if (!deal) return res.redirect('/');
+    const price = deal.deal_price != null ? (deal.deal_price === 0 ? '¡GRATIS!' : deal.deal_price.toFixed(2) + '€') : '';
+    const discount = deal.discount_percent >= 5 ? ` (-${Math.round(deal.discount_percent)}%)` : '';
+    const img = deal.image_url || '';
+    const desc = deal.description ? deal.description.substring(0, 200) : `${price}${discount} en ${deal.store || 'tienda'}`;
+    res.send(`<!DOCTYPE html><html lang="es"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${deal.title} — ${price} | MapaTacaño</title>
+<meta property="og:title" content="🔥 ${deal.title} — ${price}${discount}">
+<meta property="og:description" content="${desc}">
+<meta property="og:type" content="product">
+<meta property="og:url" content="https://web-production-a8023.up.railway.app/chollo/${id}">
+${img ? `<meta property="og:image" content="${img.startsWith('/') ? 'https://web-production-a8023.up.railway.app' + img : img}">` : ''}
+<meta name="apple-itunes-app" content="app-id=6761061197">
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,sans-serif;background:#F8FAFC;color:#0F172A}
+.header{background:#2563EB;color:#fff;padding:20px;text-align:center}.header h1{font-size:20px}
+.card{max-width:500px;margin:20px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1)}
+.card img{width:100%;height:200px;object-fit:cover}.info{padding:20px}
+.price{font-size:28px;font-weight:900;color:#DC2626}.old{text-decoration:line-through;color:#94A3B8;font-size:16px}
+.disc{background:#DC2626;color:#fff;padding:2px 8px;border-radius:6px;font-weight:800;font-size:14px}
+.cta{display:block;text-align:center;background:#2563EB;color:#fff;padding:16px;border-radius:12px;text-decoration:none;font-weight:700;font-size:18px;margin:16px 20px 20px}
+.store{color:#2563EB;font-weight:600;font-size:13px}
+.app{text-align:center;padding:20px;font-size:13px;color:#64748B}
+</style></head><body>
+<div class="header"><h1>💰 MapaTacaño</h1></div>
+<div class="card">
+${img ? `<img src="${img.startsWith('/') ? 'https://web-production-a8023.up.railway.app' + img : img}" alt="${deal.title}">` : ''}
+<div class="info">
+${deal.store ? `<p class="store">🏪 ${deal.store}</p>` : ''}
+<h2 style="font-size:18px;margin:8px 0">${deal.title}</h2>
+<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+<span class="price">${price}</span>
+${deal.original_price > 0 ? `<span class="old">${deal.original_price.toFixed(2)}€</span>` : ''}
+${deal.discount_percent >= 5 ? `<span class="disc">-${Math.round(deal.discount_percent)}%</span>` : ''}
+</div>
+${deal.discount_code ? `<p style="background:#EFF6FF;padding:10px;border-radius:8px;font-weight:800;color:#2563EB;letter-spacing:2px;text-align:center">🏷️ ${deal.discount_code}</p>` : ''}
+${deal.description ? `<p style="margin-top:10px;color:#475569;font-size:14px;line-height:1.5">${deal.description}</p>` : ''}
+</div></div>
+${deal.url ? `<a class="cta" href="${deal.url}">Ir al chollo →</a>` : ''}
+<p class="app">Descarga MapaTacaño y encuentra más chollos<br><a href="https://apps.apple.com/app/id6761061197">📱 App Store</a></p>
+</body></html>`);
+  } catch(e) { res.redirect('/'); }
+});
+
 // Privacy & Terms pages (Apple requires accessible URL)
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public/privacy.html')));
 app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public/terms.html')));
