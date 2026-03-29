@@ -53,6 +53,8 @@ if echo "$resp" | grep -q "No autenticado"; then echo "  ✅ Auth: create deal";
 # New categories (empty array is valid)
 check "Places: peluqueria" "$BASE/api/places?cat=peluqueria&limit=1" "id\|\\[\\]"
 check "Places: veterinario" "$BASE/api/places?cat=veterinario&limit=1" "id\|\\[\\]"
+check "Places: pelu canina" "$BASE/api/places?cat=peluqueria_canina&limit=1" "id\|\\[\\]"
+check "Places: bar" "$BASE/api/places?cat=bar&limit=1" "id\|\\[\\]"
 
 # Privacy page
 check "Privacy page" "$BASE/privacy" "MapaTacaño"
