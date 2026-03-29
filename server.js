@@ -1115,7 +1115,7 @@ app.get('/api/deals/trending', async (req, res) => {
 
 app.get('/api/deals', optAuth, async (req, res) => {
   try {
-    const { cat='all', sort='hot', search, limit=20, offset=0, min_price, max_price, min_discount } = req.query;
+    const { cat='all', sort='hot', search, limit=20, offset=0, min_price, max_price, min_discount, since } = req.query;
     const now = new Date().toISOString();
 
     // Auto-expire deals past their expiry date (fire-and-forget, never block)
@@ -1127,13 +1127,23 @@ app.get('/api/deals', optAuth, async (req, res) => {
       .eq('is_active', 1);
     try { q = q.or(`expires_at.is.null,expires_at.gt.${now}`); } catch {}
 
+    // Time filter: since=1d, 7d, 30d, 365d
+    if (since) {
+      const daysMap = {'1d':1,'7d':7,'30d':30,'365d':365};
+      const days = daysMap[since];
+      if (days) {
+        const sinceDate = new Date(Date.now() - days * 86400000).toISOString();
+        q = q.gte('detected_at', sinceDate);
+      }
+    }
+
     if (cat && cat !== 'all') q = q.eq('category', cat);
     if (search) q = q.ilike('title', `%${search}%`);
     if (min_price && !isNaN(parseFloat(min_price))) q = q.gte('deal_price', parseFloat(min_price));
     if (max_price && !isNaN(parseFloat(max_price))) q = q.lte('deal_price', parseFloat(max_price));
     if (min_discount && !isNaN(parseFloat(min_discount))) q = q.gte('discount_percent', parseFloat(min_discount));
 
-    if (sort === 'hot' || sort === 'temp')
+    if (sort === 'hot' || sort === 'temp' || sort === 'votes')
       q = q.order('votes_up', { ascending: false }).order('detected_at', { ascending: false });
     else if (sort === 'new')
       q = q.order('detected_at', { ascending: false });
