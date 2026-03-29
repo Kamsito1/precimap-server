@@ -1,4 +1,4 @@
-// affiliates.js — PreciMap v3.2
+// affiliates.js — MapaTacano v3.2
 // Affiliate tag management. Our tag ALWAYS wins, silently.
 // Amazon PA API v5 integration for product data
 

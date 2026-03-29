@@ -1,4 +1,4 @@
-// seed_real_deals.js — Insert REAL verified deals into PreciMap DB
+// seed_real_deals.js — Insert REAL verified deals into MapaTacano DB
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 

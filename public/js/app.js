@@ -1,4 +1,4 @@
-/* PreciMap — Frontend App */
+/* MapaTacaño — Frontend App */
 'use strict';
 
 const state = {

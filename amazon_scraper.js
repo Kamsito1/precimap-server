@@ -1,4 +1,4 @@
-// amazon_scraper.js — PreciMap v4.1
+// amazon_scraper.js — MapaTacano v4.1
 // Strategy: Curated REAL deals + Chollometro RSS
 // Images: Amazon CDN images/I/ format (NOT the broken images/P/ format)
 // All deals verified with real prices from Amazon.es
@@ -172,7 +172,7 @@ async function scrapeChollometroRSS() {
   try {
     await sleep(1000);
     const res = await fetch('https://www.chollometro.com/rss/hot', {
-      headers: { 'User-Agent': 'PreciMap/4.0', 'Accept': 'application/rss+xml,text/xml,*/*' },
+      headers: { 'User-Agent': 'MapaTacano/4.0', 'Accept': 'application/rss+xml,text/xml,*/*' },
       timeout: 10000,
     });
     if (!res.ok) { console.log('Chollometro RSS failed:', res.status); return []; }
@@ -264,7 +264,7 @@ async function verifyActiveBotDeals(supabase, botUserId) {
 
 // ─── MAIN SCRAPER ─────────────────────────────────────────────────────────────
 async function runAmazonScraper(supabase, botUserId) {
-  console.log('🤖 PreciMap scraper v4.1 starting...');
+  console.log('🤖 MapaTacano scraper v4.1 starting...');
   const allDeals = [];
 
   // 1. Check curated products for current deals

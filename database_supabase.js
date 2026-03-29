@@ -1,4 +1,4 @@
-// PreciMap — Supabase Adapter
+// MapaTacano — Supabase Adapter
 // Switch from SQLite to Supabase when ready
 // Instructions:
 // 1. Create project at supabase.com (free tier)

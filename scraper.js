@@ -1,4 +1,4 @@
-// PreciMap — Event Scraper from official Spanish city council websites
+// MapaTacano — Event Scraper from official Spanish city council websites
 // Scrapes REAL events only. No invented data.
 // Sources: Ayuntamiento de Córdoba, Madrid, Sevilla, etc.
 
