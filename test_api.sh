@@ -63,6 +63,10 @@ check "Privacy page" "$BASE/privacy" "MapaTacaño"
 check "Share deal page" "$BASE/chollo/197" "og:title"
 check "Share event page" "$BASE/evento/1" "og:title"
 
+# Cron
+resp=$(curl -s -X POST "$BASE/api/cron/cleanup?key=mapatacano2026")
+if echo "$resp" | grep -q '"ok":true'; then echo "  ✅ Cron cleanup"; PASS=$((PASS+1)); else echo "  ❌ Cron cleanup"; FAIL=$((FAIL+1)); fi
+
 echo ""
 echo "========================"
 echo "Results: $PASS passed, $FAIL failed"
