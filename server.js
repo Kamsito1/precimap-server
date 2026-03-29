@@ -2282,7 +2282,7 @@ setInterval(expireOldEvents, 6 * 60 * 60 * 1000); // every 6h
 // const { runAmazonScraper, verifyActiveBotDeals } = require('./amazon_scraper');
 console.log('ℹ️  Scraper automático desactivado — chollos manuales de usuarios');
 
-// ID del usuario bot (PreciMap Bot) — si no existe lo creamos
+// ID del usuario bot (MapaTacaño Bot) — si no existe lo creamos
 let BOT_USER_ID = process.env.BOT_USER_ID || null;
 
 // Scraper deshabilitado — función vacía para no romper referencias
@@ -2314,7 +2314,7 @@ app.post('/api/admin/run-scraper', auth, async (req, res) => {
 
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n🗺️  PreciMap v3.8.0 en http://localhost:${PORT}`);
+  console.log(`\n💰  MapaTacaño v3.8.0 en http://localhost:${PORT}`);
   console.log(`🗄️  Base de datos: Supabase (${process.env.SUPABASE_URL ? '✅ Connected' : '❌ No URL'})\n`);
 
   // Warmup caché con las queries más frecuentes para las ciudades principales
