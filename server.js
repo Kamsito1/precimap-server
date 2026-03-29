@@ -692,7 +692,7 @@ app.post('/api/auth/apple', authLimiter, async (req, res) => {
       last_report_date: today,
     });
     const token = jwt.sign({ id: newUser.id, name: newUser.name, email: newUser.email }, JWT_SECRET, { expiresIn: '30d' });
-    res.json({ token, user: { id: newUser.id, name: newUser.name, email: newUser.email, points: 0, avatar_url: null, streak: 1, apple_id, is_admin: false } });
+    res.json({ token, user: { id: newUser.id, name: newUser.name, email: newUser.email, points: 0, avatar_url: null, streak: 1, apple_id, is_admin: isAdmin(newUser.email) } });
   } catch (e) { fail(res, e.message); }
 });
 
@@ -747,6 +747,7 @@ app.get('/api/users/me', auth, async (req, res) => {
     ]);
     if (!user) return fail(res, 'Usuario no encontrado', 404);
     const { password_hash, ...safeUser } = user;
+    safeUser.is_admin = isAdmin(user.email);
     res.json({ ...safeUser, badges: badges||[], notifications: notifs||[], stats: { reports: reportCount, verified: verifiedCount, deals: dealCount } });
   } catch(e) { fail(res, e.message, 500); }
 });
@@ -1896,6 +1897,48 @@ app.post('/api/places', auth, async (req, res) => {
 
 // Feed de actividad — últimos precios reportados por la comunidad
 let _recentCache = null, _recentCacheTime = 0;
+// ─── PRODUCT SEARCH with autocomplete ────────────────────────────────────────
+app.get('/api/products/search', async (req, res) => {
+  try {
+    const { q, city } = req.query;
+    if (!q || q.length < 2) return res.json([]);
+    // Get distinct products matching query
+    const { data, error } = await supabase.from('prices')
+      .select('product')
+      .ilike('product', `%${q}%`)
+      .eq('is_active', 1)
+      .limit(50);
+    if (error) throw error;
+    const unique = [...new Set((data||[]).map(d=>d.product).filter(Boolean))].sort().slice(0,10);
+    res.json(unique);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── PRODUCT PRICES — find where a product is cheapest ───────────────────────
+app.get('/api/products/prices', async (req, res) => {
+  try {
+    const { product, city } = req.query;
+    if (!product) return res.json([]);
+    let query = supabase.from('prices')
+      .select('id,product,price,unit,reported_at,place_id,places(id,name,city,address,lat,lng)')
+      .ilike('product', `%${product}%`)
+      .eq('is_active', 1)
+      .order('price', { ascending: true })
+      .limit(30);
+    const { data, error } = await query;
+    if (error) throw error;
+    let results = data || [];
+    if (city) {
+      const nc = city.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      results = results.filter(r => {
+        const sc = (r.places?.city||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        return sc.includes(nc) || nc.includes(sc);
+      });
+    }
+    res.json(results);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.get('/api/prices/recent', async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit)||20, 50);
@@ -2466,6 +2509,15 @@ app.post('/api/deals/:id/report-scam', auth, async (req, res) => {
 });
 
 // Admin delete deal (only is_admin users)
+// Admin: clean bot deals
+app.delete('/api/admin/clean-bot-deals', auth, async (req, res) => {
+  try {
+    if (!isAdmin(req.user.email)) return fail(res, 'Solo admin', 403);
+    const { data } = await supabase.from('deals').update({ is_active: 0 }).eq('reported_by', 22);
+    res.json({ ok: true, message: 'Bot deals deactivated' });
+  } catch(e) { fail(res, e.message); }
+});
+
 app.delete('/api/deals/:id/admin', auth, async (req, res) => {
   try {
     const { data: u } = await supabase.from('users').select('is_admin').eq('id', req.user.id).single();
