@@ -8,6 +8,7 @@ const multer     = require('multer');
 const path       = require('path');
 const fs         = require('fs');
 const rateLimit  = require('express-rate-limit');
+const helmet     = require('helmet');
 const validator  = require('validator');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -54,6 +55,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(helmet({ contentSecurityPolicy: false })); // security headers (CSP disabled for static HTML)
 app.use('/public', express.static(path.join(__dirname, 'public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public/index.html')));
 
