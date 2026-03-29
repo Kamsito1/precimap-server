@@ -821,6 +821,49 @@ app.delete('/api/users/me/favorites/:stationId', auth, async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
+// ─── USER PLACES — sitios añadidos por el usuario ────────────────────────────
+app.get('/api/users/me/places', auth, async (req, res) => {
+  try {
+    const places = await db.query('places', {
+      eq: { created_by: req.user.id },
+      order: { column: 'created_at', ascending: false },
+      limit: 100,
+    });
+    res.json(places || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.patch('/api/users/me/places/:placeId', auth, async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    // Verify ownership
+    const existing = await db.getById('places', placeId);
+    if (!existing) return fail(res, 'Lugar no encontrado', 404);
+    if (existing.created_by !== req.user.id) return fail(res, 'No tienes permiso para editar este lugar', 403);
+    const { name, address, city, price_range, monthly_fee } = req.body;
+    const updates = {};
+    if (name?.trim()) updates.name = name.trim();
+    if (address !== undefined) updates.address = (address||'').trim();
+    if (city !== undefined) updates.city = (city||'').trim();
+    if (price_range && [1,2,3,4].includes(Number(price_range))) updates.price_range = Number(price_range);
+    if (monthly_fee !== undefined) updates.monthly_fee = monthly_fee ? parseFloat(monthly_fee) : null;
+    if (!Object.keys(updates).length) return fail(res, 'Nada que actualizar');
+    const updated = await db.update('places', placeId, updates);
+    res.json(updated);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.delete('/api/users/me/places/:placeId', auth, async (req, res) => {
+  try {
+    const { placeId } = req.params;
+    const existing = await db.getById('places', placeId);
+    if (!existing) return fail(res, 'Lugar no encontrado', 404);
+    if (existing.created_by !== req.user.id) return fail(res, 'No tienes permiso', 403);
+    await db.update('places', placeId, { is_active: 0 });
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 // ─── DEAL VOTES — get user's votes for persistence ──────────────────────────
 app.get('/api/users/me/votes', auth, async (req, res) => {
   try {
