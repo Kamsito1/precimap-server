@@ -1391,8 +1391,8 @@ app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
     const parsedStarts = parseUserDate(starts_at);
     const parsedExpires = parseUserDate(customExpires) || null;
     const deal = await db.insert('deals', {
-      title: title.trim(), url: url||null, deal_price: parseFloat(deal_price),
-      original_price: original_price ? parseFloat(original_price) : null,
+      title: title.trim(), url: url||null, deal_price: parseFloat(String(deal_price).replace(',','.')),
+      original_price: original_price ? parseFloat(String(original_price).replace(',','.')) : null,
       discount_percent: disc, store: autoStore, category: category||'otros',
       image_url, reported_by: req.user.id, is_active: 1,
       expires_at: parsedExpires,
@@ -1496,13 +1496,13 @@ app.patch('/api/deals/:id', auth, async (req, res) => {
     const updates = {};
     if (title) updates.title = title.trim();
     if (description !== undefined) updates.description = description;
-    if (deal_price !== undefined) updates.deal_price = parseFloat(deal_price);
-    if (original_price !== undefined) updates.original_price = parseFloat(original_price);
+    if (deal_price !== undefined) updates.deal_price = parseFloat(String(deal_price).replace(',','.'));
+    if (original_price !== undefined) updates.original_price = parseFloat(String(original_price).replace(',','.'));
     if (store) updates.store = store;
     if (category) updates.category = category;
     if (url) updates.url = url;
     if (discount_code !== undefined) updates.discount_code = discount_code;
-    if (original_price && deal_price) updates.discount_percent = ((parseFloat(original_price) - parseFloat(deal_price)) / parseFloat(original_price) * 100);
+    if (original_price && deal_price) updates.discount_percent = ((parseFloat(String(original_price).replace(',','.')) - parseFloat(String(deal_price).replace(',','.'))) / parseFloat(String(original_price).replace(',','.')) * 100);
     await db.update('deals', parseInt(id), updates);
     res.json({ ok: true });
   } catch(e) { fail(res, e.message, 500); }
@@ -1529,7 +1529,7 @@ app.post('/api/deals/:id/edit', auth, async (req, res) => {
     if (deal.reported_by !== req.user.id) return fail(res, 'Sin permiso', 403);
     const { title, deal_price } = req.body;
     if (!title?.trim()) return fail(res, 'Título obligatorio');
-    const parsedDealPrice = parseFloat(deal_price);
+    const parsedDealPrice = parseFloat(String(deal_price).replace(',','.'));
     if (!deal_price || isNaN(parsedDealPrice) || parsedDealPrice < 0) return fail(res, 'Precio inválido');
     const updated = await db.update('deals', id, {
       title: title.trim(),
@@ -2017,7 +2017,7 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
     if (!limit3.ok) return fail(res, `Has alcanzado el límite diario de ${DAILY_LIMIT} publicaciones. Vuelve mañana.`);
     const { place_id, product, price, unit } = req.body;
     if (!place_id||!product||!price) return fail(res, 'Faltan campos');
-    const parsedPrice = parseFloat(price);
+    const parsedPrice = parseFloat(String(price).replace(',','.'));
     if (isNaN(parsedPrice) || parsedPrice <= 0) return fail(res, 'Precio inválido');
     if (parsedPrice > 500) return fail(res, 'El precio parece demasiado alto (máx 500€)');
     if (product.trim().length < 2) return fail(res, 'El nombre del producto es demasiado corto');
@@ -2332,7 +2332,7 @@ app.post('/api/events', auth, upload.single('image'), async (req, res) => {
       title: title.trim(), category, date, time: time||null,
       venue: venue||null, address: address||null, city: city||null,
       lat: evLat, lng: evLng,
-      price_from: price_from?(parseFloat(price_from)||null):null,
+      price_from: price_from?(parseFloat(String(price_from).replace(',','.'))||null):null,
       is_free: is_free?1:0, url: url||null, description: description||null,
       reported_by: req.user.id, source: 'user', is_active: 1, votes_up: 0,
       photos: JSON.stringify(photos),
