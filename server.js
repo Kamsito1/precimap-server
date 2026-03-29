@@ -833,6 +833,58 @@ app.get('/api/users/me/places', auth, async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
+// ─── USER PRICES — productos añadidos por el usuario ─────────────────────────
+app.get('/api/users/me/prices', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('prices')
+      .select('*, places(id,name,city,category)')
+      .eq('reported_by', req.user.id).eq('is_active', 1)
+      .order('reported_at', { ascending: false }).limit(100);
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── SEARCH SUPERMARKETS by name in a city ───────────────────────────────────
+app.get('/api/places/search-super', async (req, res) => {
+  try {
+    const { q, city } = req.query;
+    if (!q || q.length < 2) return res.json([]);
+    let query = supabase.from('places').select('id,name,city,address,lat,lng')
+      .eq('category', 'supermercado').eq('is_active', 1)
+      .ilike('name', `%${q}%`).limit(15);
+    if (city) query = query.ilike('city', `%${city}%`);
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── CITY AUTOCOMPLETE ───────────────────────────────────────────────────────
+app.get('/api/cities/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return res.json([]);
+    const { data, error } = await supabase.from('places')
+      .select('city').eq('is_active', 1).ilike('city', `%${q}%`).limit(50);
+    if (error) throw error;
+    const unique = [...new Set((data||[]).map(d=>d.city).filter(Boolean))].sort().slice(0,10);
+    res.json(unique);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// ─── CHECK DUPLICATE PRODUCT in a supermarket ────────────────────────────────
+app.get('/api/prices/check-duplicate', async (req, res) => {
+  try {
+    const { place_id, product } = req.query;
+    if (!place_id || !product) return res.json({ exists: false });
+    const { data } = await supabase.from('prices')
+      .select('id,price,reported_at').eq('place_id', parseInt(place_id))
+      .ilike('product', product.trim()).eq('is_active', 1).limit(1);
+    res.json({ exists: (data||[]).length > 0, existing: data?.[0] || null });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.patch('/api/users/me/places/:placeId', auth, async (req, res) => {
   try {
     const { placeId } = req.params;
