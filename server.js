@@ -1592,7 +1592,7 @@ app.post('/api/deals/:id/comments', auth, async (req, res) => {
     if (!text?.trim()) return fail(res, 'El comentario no puede estar vacío');
     const comment = await db.insert('deal_comments', {
       deal_id: parseId(req.params.id), user_id: req.user.id,
-      parent_id: parent_id || null, text: text.trim(), votes_up: 0,
+      parent_id: parent_id || null, text: text.trim(), votes_up: 0, is_deleted: 0,
     });
     await addPoints(req.user.id, 1, 'comentar');
     // Notify deal author
@@ -1607,9 +1607,13 @@ app.post('/api/deals/:id/comments', auth, async (req, res) => {
 
 // Admin delete comment
 app.delete('/api/comments/:id', auth, async (req, res) => {
+// Delete comment — admin can delete any, user can delete own
+app.delete('/api/comments/:id', auth, async (req, res) => {
   try {
-    if (!isAdmin(req.user.email)) return fail(res, 'Solo admin', 403);
-    await supabase.from('deal_comments').update({ is_deleted: 1 }).eq('id', parseInt(req.params.id));
+    const c = await db.query('deal_comments', { eq: { id: parseInt(req.params.id) }, single: true }).catch(()=>null);
+    if (!c) return fail(res, 'No encontrado');
+    if (c.user_id !== req.user.id && !isAdmin(req.user.email)) return fail(res, 'Sin permiso', 403);
+    await supabase.from('deal_comments').update({ is_deleted: 1, text: '[eliminado]' }).eq('id', parseInt(req.params.id));
     res.json({ ok: true });
   } catch(e) { fail(res, e.message); }
 });
@@ -1621,11 +1625,38 @@ app.post('/api/comments/:id/vote', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
-app.delete('/api/comments/:id', auth, async (req, res) => {
+// ─── EVENT COMMENTS + REPORTS ────────────────────────────────────────────────
+app.get('/api/events/:id/comments', async (req, res) => {
   try {
-    const c = await db.query('deal_comments', { eq: { id: req.params.id }, single: true });
-    if (!c || c.user_id !== req.user.id) return fail(res, 'Sin permiso', 403);
-    await db.update('deal_comments', c.id, { is_deleted: 1, text: '[eliminado]' });
+    // Use deal_comments table with a deal_id that maps to event (negative IDs for events)
+    const evId = -parseInt(req.params.id);
+    const { data } = await supabase.from('deal_comments').select('*, users(id,name,avatar_url)')
+      .eq('deal_id', evId).eq('is_deleted', 0).order('created_at', { ascending: true });
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+app.post('/api/events/:id/comments', auth, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return fail(res, 'Comentario vacío');
+    const evId = -parseInt(req.params.id);
+    const comment = await db.insert('deal_comments', {
+      deal_id: evId, user_id: req.user.id, text: text.trim(), votes_up: 0, is_deleted: 0,
+    });
+    const full = await supabase.from('deal_comments').select('*, users(id,name,avatar_url)').eq('id', comment.id).single();
+    res.json(full.data || comment);
+  } catch(e) { fail(res, e.message); }
+});
+
+app.post('/api/events/:id/report', auth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const { data: admins } = await supabase.from('users').select('id,email');
+    for (const a of (admins||[]).filter(u=>isAdmin(u.email))) {
+      await db.insert('notifications', { user_id: a.id, type: 'report', title: `Evento reportado #${req.params.id}`,
+        body: reason||'Sin razón', message: JSON.stringify({report_type:'event',target_id:parseInt(req.params.id),reported_by:req.user.id}) });
+    }
     res.json({ ok: true });
   } catch(e) { fail(res, e.message); }
 });
