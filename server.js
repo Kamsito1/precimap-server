@@ -13,7 +13,7 @@ const validator  = require('validator');
 const { createClient } = require('@supabase/supabase-js');
 
 // ─── ADMIN CONFIG ────────────────────────────────────────────────────────────
-const ADMIN_EMAILS = ['sitoexpositorodriguez@gmail.com'];
+const ADMIN_EMAILS = ['sitoexpositorodriguez@gmail.com', 'contacto@mapatacaño.es'];
 const isAdmin = (email) => ADMIN_EMAILS.includes((email||'').toLowerCase());
 const { applyOurTag, detectStore, extractAsin, getAmazonProductInfo } = require('./affiliates');
 
