@@ -1605,6 +1605,15 @@ app.post('/api/deals/:id/comments', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+// Admin delete comment
+app.delete('/api/comments/:id', auth, async (req, res) => {
+  try {
+    if (!isAdmin(req.user.email)) return fail(res, 'Solo admin', 403);
+    await supabase.from('deal_comments').update({ is_deleted: 1 }).eq('id', parseInt(req.params.id));
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message); }
+});
+
 app.post('/api/comments/:id/vote', auth, async (req, res) => {
   try {
     await supabase.rpc('comment_vote_up', { cid: parseId(req.params.id) });
