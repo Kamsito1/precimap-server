@@ -2545,6 +2545,20 @@ app.listen(PORT, () => {
 
     // Calentar prices/recent (sin caché propio, pero la query de Supabase es rápida si se ejecuta una vez)
     fetch(`http://localhost:${PORT}/api/prices/recent?limit=20`).catch(()=>{});
+
+    // Auto-cleanup: deactivate past events + expired deals every 6 hours
+    async function autoCleanup() {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data: pe } = await supabase.from('events').update({ is_active: 0 }).lt('date', today).eq('is_active', 1).select('id');
+        const { data: ed } = await supabase.from('deals').update({ is_active: 0 }).lt('expires_at', new Date().toISOString()).eq('is_active', 1).select('id');
+        if ((pe?.length||0) + (ed?.length||0) > 0) {
+          console.log(`🧹 Auto-cleanup: ${pe?.length||0} past events, ${ed?.length||0} expired deals deactivated`);
+        }
+      } catch(_) {}
+    }
+    autoCleanup(); // run once on startup
+    setInterval(autoCleanup, 6 * 60 * 60 * 1000); // then every 6 hours
   }, 3000);
 });
 
