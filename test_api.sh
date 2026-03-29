@@ -25,8 +25,14 @@ check "Health" "$BASE/api/health" "4.0.0"
 # Version
 check "Version" "$BASE/api/version" "4.0.0"
 
-# Gas stats
-check "Gas stats" "$BASE/api/gasolineras/stats" "g95"
+# Gas stats (may need warm-up after deploy)
+resp=$(curl -s -m 15 "$BASE/api/gasolineras/stats")
+if echo "$resp" | grep -q "g95"; then echo "  ✅ Gas stats"; PASS=$((PASS+1)); 
+else 
+  sleep 5; resp=$(curl -s -m 15 "$BASE/api/gasolineras/stats")
+  if echo "$resp" | grep -q "g95"; then echo "  ✅ Gas stats (warm-up)"; PASS=$((PASS+1)); 
+  else echo "  ❌ Gas stats"; FAIL=$((FAIL+1)); fi
+fi
 
 # Deals
 check "Deals list" "$BASE/api/deals?limit=1" "title"
@@ -50,6 +56,9 @@ check "Places: veterinario" "$BASE/api/places?cat=veterinario&limit=1" "id\|\\[\
 
 # Privacy page
 check "Privacy page" "$BASE/privacy" "MapaTacaño"
+
+# Share page
+check "Share page" "$BASE/chollo/197" "og:title"
 
 echo ""
 echo "========================"
