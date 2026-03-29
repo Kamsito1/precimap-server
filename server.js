@@ -1485,6 +1485,29 @@ app.post('/api/deals/:id/vote', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+// Edit deal — owner can edit their own, admin can edit any
+app.patch('/api/deals/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deal = await db.query('deals', { eq: { id: parseInt(id) }, single: true });
+    if (!deal) return fail(res, 'Chollo no encontrado');
+    if (deal.reported_by !== req.user.id && !isAdmin(req.user.email)) return fail(res, 'No puedes editar este chollo');
+    const { title, description, deal_price, original_price, store, category, url, discount_code } = req.body;
+    const updates = {};
+    if (title) updates.title = title.trim();
+    if (description !== undefined) updates.description = description;
+    if (deal_price !== undefined) updates.deal_price = parseFloat(deal_price);
+    if (original_price !== undefined) updates.original_price = parseFloat(original_price);
+    if (store) updates.store = store;
+    if (category) updates.category = category;
+    if (url) updates.url = url;
+    if (discount_code !== undefined) updates.discount_code = discount_code;
+    if (original_price && deal_price) updates.discount_percent = ((parseFloat(original_price) - parseFloat(deal_price)) / parseFloat(original_price) * 100);
+    await db.update('deals', parseInt(id), updates);
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.delete('/api/deals/:id', auth, async (req, res) => {
   try {
     const deal = await db.query('deals', { eq: { id: req.params.id }, single: true });
@@ -2507,6 +2530,11 @@ app.post('/api/deals/:id/report-expired', auth, async (req, res) => {
       await supabase.from('deals').update({ expire_reports: count }).eq('id', dealId);
     }
     await addPoints(req.user.id, 2, 'reportar oferta expirada');
+    // Notify admins
+    const { data: admins } = await supabase.from('users').select('id,email');
+    for (const a of (admins||[]).filter(u=>isAdmin(u.email))) {
+      await db.insert('notifications', { user_id: a.id, type: 'report', title: `Oferta expirada: deal #${dealId}`, body: `${count} usuarios la reportaron. ${deactivated?'Auto-desactivada.':''}`, message: JSON.stringify({report_type:'deal_expired',target_id:dealId,reported_by:req.user.id}) });
+    }
     res.json({ ok: true, expire_reports: count, deactivated });
   } catch(e) { fail(res, e.message, 500); }
 });
@@ -2528,6 +2556,11 @@ app.post('/api/deals/:id/report-scam', auth, async (req, res) => {
       await supabase.from('deals').update({ is_active: 0 }).eq('id', dealId);
     }
     res.json({ ok: true, report_count: count, deactivated: count >= 10 });
+    // Notify admins
+    const { data: adm2 } = await supabase.from('users').select('id,email');
+    for (const a of (adm2||[]).filter(u=>isAdmin(u.email))) {
+      await db.insert('notifications', { user_id: a.id, type: 'report', title: `Timo reportado: deal #${dealId}`, body: `Razón: ${reason||'timo'}. ${count} reportes total.`, message: JSON.stringify({report_type:'deal_scam',target_id:dealId,reported_by:req.user.id}) });
+    }
   } catch(e) { fail(res, e.message, 500); }
 });
 
