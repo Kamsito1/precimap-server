@@ -2218,6 +2218,20 @@ app.post('/api/events', auth, upload.single('image'), async (req, res) => {
         }
       } catch { if (req.file.filename) photos = [`/public/uploads/${req.file.filename}`]; }
     }
+    // Support base64 image from React Native
+    if (photos.length === 0 && req.body.image_base64) {
+      try {
+        const buf = Buffer.from(req.body.image_base64, 'base64');
+        if (buf.length > 0 && buf.length < 8 * 1024 * 1024) {
+          const p = `events/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+          const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: 'image/jpeg' });
+          if (!upErr) {
+            const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
+            photos = [publicUrl];
+          }
+        }
+      } catch(_) {}
+    }
     const event = await db.insert('events', {
       title: title.trim(), category, date, time: time||null,
       venue: venue||null, address: address||null, city: city||null,
