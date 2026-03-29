@@ -109,6 +109,53 @@ ${deal.url ? `<a class="cta" href="${deal.url}">Ir al chollo →</a>` : ''}
   } catch(e) { res.redirect('/'); }
 });
 
+// Share event page — Open Graph for WhatsApp/Telegram previews
+app.get('/evento/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.redirect('/');
+    const { data: ev } = await supabase.from('events').select('*').eq('id', id).eq('is_active', 1).single();
+    if (!ev) return res.redirect('/');
+    const d = ev.date ? new Date(ev.date + 'T12:00:00') : null;
+    const dateStr = d ? `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}` : '';
+    const price = ev.is_free ? 'GRATIS' : ev.price_from ? `Desde ${ev.price_from}€` : '';
+    const cats = {cine:'🎬',musica:'🎵',teatro:'🎭',deporte:'⚽',gastronomia:'🍷',festival:'🎪',expo:'🖼️',otro:'📌'};
+    const emoji = cats[ev.category] || '📌';
+    const img = Array.isArray(ev.photos) && ev.photos.length > 0 ? ev.photos[0] : '';
+    res.send(`<!DOCTYPE html><html lang="es"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${ev.title} — ${dateStr} | MapaTacaño</title>
+<meta property="og:title" content="${emoji} ${ev.title}">
+<meta property="og:description" content="${dateStr}${ev.venue?' · '+ev.venue:''}${ev.city?' · '+ev.city:''}${price?' · '+price:''}">
+<meta property="og:type" content="event">
+${img ? `<meta property="og:image" content="${img.startsWith('/')?'https://web-production-a8023.up.railway.app'+img:img}">` : ''}
+<meta name="apple-itunes-app" content="app-id=6761061197">
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,sans-serif;background:#F8FAFC;color:#0F172A}
+.header{background:#7C3AED;color:#fff;padding:20px;text-align:center}.header h1{font-size:20px}
+.card{max-width:500px;margin:20px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1)}
+.card img{width:100%;height:200px;object-fit:cover}.info{padding:20px}
+.date{font-size:32px;font-weight:900;color:#7C3AED}.venue{color:#64748B;font-size:14px}
+.free{background:#22C55E;color:#fff;padding:4px 12px;border-radius:99px;font-weight:700;font-size:13px;display:inline-block}
+.paid{background:#F59E0B;color:#fff;padding:4px 12px;border-radius:99px;font-weight:700;font-size:13px;display:inline-block}
+.cta{display:block;text-align:center;background:#7C3AED;color:#fff;padding:16px;border-radius:12px;text-decoration:none;font-weight:700;font-size:18px;margin:16px 20px 20px}
+.app{text-align:center;padding:20px;font-size:13px;color:#64748B}
+</style></head><body>
+<div class="header"><h1>💰 MapaTacaño — Eventos</h1></div>
+<div class="card">
+${img ? `<img src="${img.startsWith('/')?'https://web-production-a8023.up.railway.app'+img:img}" alt="${ev.title}">` : ''}
+<div class="info">
+<p class="date">${emoji} ${dateStr}${ev.time?' · '+String(ev.time).slice(0,5):''}</p>
+<h2 style="font-size:18px;margin:8px 0">${ev.title}</h2>
+${ev.venue?`<p class="venue">📍 ${ev.venue}${ev.address?', '+ev.address:''}${ev.city?', '+ev.city:''}</p>`:''}
+<div style="margin:10px 0">${ev.is_free?'<span class="free">🆓 GRATIS</span>':price?`<span class="paid">${price}</span>`:''}</div>
+${ev.description?`<p style="margin-top:10px;color:#475569;font-size:14px">${ev.description}</p>`:''}
+</div></div>
+${ev.url?`<a class="cta" href="${ev.url}">Más info / Entradas →</a>`:''}
+<p class="app">Descubre más eventos en MapaTacaño<br><a href="https://apps.apple.com/app/id6761061197">📱 App Store</a></p>
+</body></html>`);
+  } catch(e) { res.redirect('/'); }
+});
+
 // Privacy & Terms pages (Apple requires accessible URL)
 app.get('/privacy', (req, res) => res.sendFile(path.join(__dirname, 'public/privacy.html')));
 app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public/terms.html')));
