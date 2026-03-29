@@ -1,56 +1,40 @@
-# PreciMap API v3.1.0
+# 💰 MapaTacaño — Server
 
-Backend de PreciMap — Node.js + Express + Supabase
+> Backend API para MapaTacaño. Node.js + Express + Supabase.
 
-## Variables de entorno requeridas
+## 🌐 Production
 
-Crea un archivo `.env` basado en `.env.example`:
+- **URL:** https://web-production-a8023.up.railway.app
+- **Health:** https://web-production-a8023.up.railway.app/api/health
+- **Version:** v4.0.0
 
-```
-PORT=3000
-JWT_SECRET=<secreto_aleatorio_largo>
-SUPABASE_URL=https://tu-proyecto.supabase.co
-SUPABASE_ANON_KEY=sb_publishable_...
-SUPABASE_SERVICE_KEY=sb_secret_...
-AMAZON_AFFILIATE_TAG=tu-tag-21
-```
+## 📡 API Endpoints
 
-## Arrancar en local
+### Public
+- `GET /api/health` — Server status
+- `GET /api/version` — Version info
+- `GET /api/gasolineras/stats` — Gas price stats (G95, Diesel, G98, GLP)
+- `GET /api/gasolineras?lat=X&lng=Y&radius=30` — Nearby gas stations
+- `GET /api/deals?sort=hot&limit=20` — Deals list
+- `GET /api/places?cat=restaurante&city=Córdoba` — Places
+- `GET /api/events?cat=all&city=Córdoba` — Events
 
+### Authenticated
+- `POST /api/deals` — Create deal (multipart, image upload)
+- `POST /api/deals/:id/images` — Add images to deal
+- `POST /api/deals/:id/vote` — Vote on deal
+- `POST /api/deals/:id/report-scam` — Report timo
+- `POST /api/events` — Create event (multipart, image upload)
+- `PATCH /api/users/me` — Update profile
+
+## 🧪 Testing
 ```bash
-npm install
-node server.js
-# Escucha en http://localhost:3000
+bash test_api.sh
 ```
 
-## Despliegue en Railway
-
-1. Conecta el repositorio en railway.app
-2. Añade las variables de entorno en el dashboard
-3. Railway despliega automáticamente con `railway.toml`
-
-## Despliegue en Render
-
-1. New Web Service → conecta el repo
-2. Build Command: `npm install`
-3. Start Command: `node server.js`
-4. Añade variables de entorno
-
-## Base de datos
-
-Supabase — ejecuta `supabase_migration.sql` en el SQL Editor del proyecto.
-
-## Endpoints principales
-
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | /api/health | Estado del servidor |
-| POST | /api/auth/register | Registro |
-| POST | /api/auth/login | Login |
-| GET | /api/gasolineras | Gasolineras (caché 10min) |
-| GET | /api/places | Lugares con precios |
-| GET | /api/deals | Chollos |
-| GET | /api/leaderboard | Ranking |
-| GET | /api/events | Eventos |
-| GET | /api/banks | Ofertas bancarias |
-| GET | /api/supermarkets/ranking | Ranking supermercados OCU |
+## 🛡️ Security
+- Helmet (security headers)
+- Rate limiting
+- CORS configured
+- Supabase parameterized queries (no SQL injection)
+- JWT auth with bcrypt passwords
