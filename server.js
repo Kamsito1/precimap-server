@@ -2495,42 +2495,6 @@ async function expireOldEvents() {
 expireOldEvents();
 setInterval(expireOldEvents, 6 * 60 * 60 * 1000); // every 6h
 
-// ─── AMAZON SCRAPER — DESHABILITADO ──────────────────────────────────────────
-// Los chollos los añaden los usuarios directamente desde la app.
-// El scraper automático está desactivado para evitar contenido desactualizado.
-// const { runAmazonScraper, verifyActiveBotDeals } = require('./amazon_scraper');
-console.log('ℹ️  Scraper automático desactivado — chollos manuales de usuarios');
-
-// ID del usuario bot (MapaTacaño Bot) — si no existe lo creamos
-let BOT_USER_ID = process.env.BOT_USER_ID || null;
-
-// Scraper deshabilitado — función vacía para no romper referencias
-async function ensureBotUser() { return null; }
-async function runScraperJob() { /* scraper deshabilitado */ }
-// setInterval y setTimeout eliminados — scraper off
-
-// Endpoint manual para admin — forzar scraper o verificación
-// Admin: re-award badges to all users (retroactive)
-app.post('/api/admin/recheck-badges', auth, async (req, res) => {
-  if (!isAdmin(req.user.email)) return fail(res, 'No autorizado', 403);
-  try {
-    const { data: users } = await supabase.from('users').select('id,name').eq('is_deleted', 0).limit(200);
-    let count = 0;
-    for (const u of (users || [])) {
-      await checkBadges(u.id).catch(() => {});
-      count++;
-    }
-    res.json({ ok: true, checked: count });
-  } catch(e) { fail(res, e.message); }
-});
-
-app.post('/api/admin/run-scraper', auth, async (req, res) => {
-  if (!isAdmin(req.user.email)) return fail(res, 'No autorizado', 403);
-  const { action = 'all' } = req.body;
-  runScraperJob().catch(console.error); // always run full job
-  res.json({ ok: true, message: `Scraper lanzado en background (action: ${action})` });
-});
-
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n💰  MapaTacaño v4.0.0 en http://localhost:${PORT}`);
