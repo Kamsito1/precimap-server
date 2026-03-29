@@ -57,8 +57,9 @@ check "Places: veterinario" "$BASE/api/places?cat=veterinario&limit=1" "id\|\\[\
 # Privacy page
 check "Privacy page" "$BASE/privacy" "MapaTacaño"
 
-# Share page
-check "Share page" "$BASE/chollo/197" "og:title"
+# Share pages
+check "Share deal page" "$BASE/chollo/197" "og:title"
+check "Share event page" "$BASE/evento/1" "og:title"
 
 echo ""
 echo "========================"
