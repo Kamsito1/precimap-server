@@ -1605,8 +1605,6 @@ app.post('/api/deals/:id/comments', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
-// Admin delete comment
-app.delete('/api/comments/:id', auth, async (req, res) => {
 // Delete comment — admin can delete any, user can delete own
 app.delete('/api/comments/:id', auth, async (req, res) => {
   try {
