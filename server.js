@@ -2124,6 +2124,27 @@ app.post('/api/events/:id/deactivate', adminAuth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+// ─── CRON / MAINTENANCE ─────────────────────────────────────────────────────
+// Auto-deactivate past events + expired deals (call via Railway cron or manually)
+app.post('/api/cron/cleanup', async (req, res) => {
+  // Simple secret key auth for cron
+  const key = req.headers['x-cron-key'] || req.query.key;
+  if (key !== (process.env.CRON_SECRET || 'mapatacano2026')) return fail(res, 'Unauthorized', 401);
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    // Deactivate past events
+    const { data: pastEvents } = await supabase.from('events').update({ is_active: 0 }).lt('date', today).eq('is_active', 1).select('id');
+    // Deactivate expired deals
+    const { data: expiredDeals } = await supabase.from('deals').update({ is_active: 0 }).lt('expires_at', new Date().toISOString()).eq('is_active', 1).select('id');
+    res.json({
+      ok: true,
+      deactivated_events: pastEvents?.length || 0,
+      expired_deals: expiredDeals?.length || 0,
+      date: today,
+    });
+  } catch(e) { fail(res, e.message); }
+});
+
 // ─── BANKS ───────────────────────────────────────────────────────────────────
 app.get('/api/banks', async (req, res) => {
   try {
