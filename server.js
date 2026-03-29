@@ -348,7 +348,7 @@ app.get('/api/levels', (req, res) => {
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({
   ok: true,
-  version: '3.8.0',
+  version: '4.0.0',
   db: 'supabase',
   stations: _gasCache?.length || 0,
   gas_cache_age_min: _gasCacheTime ? Math.round((Date.now()-_gasCacheTime)/60000) : null,
@@ -358,8 +358,8 @@ app.get('/api/health', (req, res) => res.json({
 
 // Version + changelog
 app.get('/api/version', (req, res) => res.json({
-  server: '3.8.0',
-  app: '1.3.0',
+  server: '4.0.0',
+  app: '2.0.0',
   features: ['gasolineras-12225','places-27441','precios-29423','users-43','chollos-5','eventos-43','stats-por-ciudad','feed-actividad','trending-deals','trending-events','search-global','tips-ahorro-18','google-signin','admob','favorites-sync','weekly-cost-supermarkets','price-proximity-sort','cache-warmup'],
   updated: '2026-03-28',
 }));
@@ -451,7 +451,7 @@ app.get('/api/stats', async (req, res) => {  try {
       places, prices, deals, users, events, price_history: priceHistory,
       gasolineras: _gasCache?.length || 0,
       gas_stats: gasStats,
-      version: '3.8.0',
+      version: '4.0.0',
     };
     _globalStatsCache = result; _globalStatsCacheTime = Date.now();
     res.set('Cache-Control','public,max-age=60').json(result);
@@ -1177,6 +1177,39 @@ app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
     await addPoints(req.user.id, 5, 'publicar chollo');
     await checkBadges(req.user.id);
     res.json(deal);
+  } catch(e) { fail(res, e.message); }
+});
+
+// Upload additional images to a deal (up to 3 total)
+app.post('/api/deals/:id/images', auth, upload.single('image'), async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return fail(res, 'ID inválido');
+    const deal = await db.query('deals', { eq: { id }, single: true });
+    if (!deal) return fail(res, 'No encontrado', 404);
+    if (deal.reported_by !== req.user.id && !isAdmin(req.user.email)) return fail(res, 'Sin permiso', 403);
+    const currentImages = Array.isArray(deal.images) ? deal.images : [];
+    if (currentImages.length >= 3) return fail(res, 'Máximo 3 imágenes');
+    let image_url = null;
+    if (req.file) {
+      try {
+        const buf = fs.readFileSync(req.file.path);
+        const ext = req.file.originalname.split('.').pop();
+        const p = `deals/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: req.file.mimetype });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
+          image_url = publicUrl;
+          fs.unlinkSync(req.file.path);
+        }
+      } catch { image_url = `/public/uploads/${req.file.filename}`; }
+    }
+    if (!image_url) return fail(res, 'No se pudo subir la imagen');
+    const newImages = [...currentImages, image_url];
+    await db.update('deals', id, { images: JSON.stringify(newImages) });
+    // Also set image_url to cover image if not set
+    if (!deal.image_url) await db.update('deals', id, { image_url: newImages[0] });
+    res.json({ ok: true, images: newImages });
   } catch(e) { fail(res, e.message); }
 });
 
@@ -2314,7 +2347,7 @@ app.post('/api/admin/run-scraper', auth, async (req, res) => {
 
 // ─── START ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`\n💰  MapaTacaño v3.8.0 en http://localhost:${PORT}`);
+  console.log(`\n💰  MapaTacaño v4.0.0 en http://localhost:${PORT}`);
   console.log(`🗄️  Base de datos: Supabase (${process.env.SUPABASE_URL ? '✅ Connected' : '❌ No URL'})\n`);
 
   // Warmup caché con las queries más frecuentes para las ciudades principales
