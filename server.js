@@ -2518,6 +2518,47 @@ app.delete('/api/admin/clean-bot-deals', auth, async (req, res) => {
   } catch(e) { fail(res, e.message); }
 });
 
+// ─── REPORTS — report places, deals, events ──────────────────────────────────
+app.post('/api/reports', auth, async (req, res) => {
+  try {
+    const { type, target_id, reason, details } = req.body;
+    if (!type || !target_id || !reason) return fail(res, 'Faltan campos');
+    // Get admin user IDs
+    const { data: admins } = await supabase.from('users').select('id,email');
+    const adminIds = (admins||[]).filter(u => isAdmin(u.email)).map(u => u.id);
+    // Create notification for each admin
+    for (const adminId of adminIds) {
+      await db.insert('notifications', {
+        user_id: adminId, type: 'report',
+        title: `Reporte: ${type} #${target_id}`,
+        body: `${reason}${details ? ' — ' + details : ''}`,
+        message: JSON.stringify({ report_type: type, target_id, reason, details, reported_by: req.user.id }),
+      });
+    }
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// Admin: get all reports (from notifications)
+app.get('/api/admin/reports', auth, async (req, res) => {
+  try {
+    if (!isAdmin(req.user.email)) return fail(res, 'Solo admin', 403);
+    const { data, error } = await supabase.from('notifications')
+      .select('*').eq('type', 'report').order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    res.json(data || []);
+  } catch(e) { fail(res, e.message, 500); }
+});
+
+// Admin: resolve report (mark notification as read)
+app.patch('/api/admin/reports/:id', auth, async (req, res) => {
+  try {
+    if (!isAdmin(req.user.email)) return fail(res, 'Solo admin', 403);
+    await supabase.from('notifications').update({ is_read: 1 }).eq('id', parseInt(req.params.id));
+    res.json({ ok: true });
+  } catch(e) { fail(res, e.message, 500); }
+});
+
 app.delete('/api/deals/:id/admin', auth, async (req, res) => {
   try {
     const { data: u } = await supabase.from('users').select('is_admin').eq('id', req.user.id).single();
