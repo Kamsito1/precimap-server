@@ -1502,6 +1502,10 @@ app.patch('/api/deals/:id', auth, async (req, res) => {
     if (category) updates.category = category;
     if (url) updates.url = url;
     if (discount_code !== undefined) updates.discount_code = discount_code;
+    if (req.body.photos && Array.isArray(req.body.photos)) {
+      updates.images = JSON.stringify(req.body.photos);
+      if (req.body.photos.length > 0) updates.image_url = req.body.photos[0];
+    }
     if (original_price && deal_price) updates.discount_percent = ((parseFloat(String(original_price).replace(',','.')) - parseFloat(String(deal_price).replace(',','.'))) / parseFloat(String(original_price).replace(',','.')) * 100);
     await db.update('deals', parseInt(id), updates);
     res.json({ ok: true });
