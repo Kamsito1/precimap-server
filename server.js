@@ -15,6 +15,21 @@ const { createClient } = require('@supabase/supabase-js');
 // ─── ADMIN CONFIG ────────────────────────────────────────────────────────────
 const ADMIN_EMAILS = ['sitoexpositorodriguez@gmail.com', 'contacto@mapatacaño.es'];
 const isAdmin = (email) => ADMIN_EMAILS.includes((email||'').toLowerCase());
+const DAILY_LIMIT = 10;
+async function checkDailyLimit(userId, userEmail) {
+  if (isAdmin(userEmail)) return { ok: true };
+  const today = new Date().toISOString().split('T')[0];
+  const todayStart = today + 'T00:00:00Z';
+  const counts = await Promise.all([
+    supabase.from('deals').select('id',{count:'exact',head:true}).eq('reported_by',userId).gte('created_at',todayStart).eq('is_active',1),
+    supabase.from('places').select('id',{count:'exact',head:true}).eq('reported_by',userId).gte('created_at',todayStart).eq('is_active',1),
+    supabase.from('prices').select('id',{count:'exact',head:true}).eq('reported_by',userId).gte('reported_at',todayStart).eq('is_active',1),
+    supabase.from('events').select('id',{count:'exact',head:true}).eq('reported_by',userId).gte('created_at',todayStart).eq('is_active',1),
+  ]);
+  const total = counts.reduce((s,c) => s + (c.count||0), 0);
+  if (total >= DAILY_LIMIT) return { ok: false, remaining: 0, total };
+  return { ok: true, remaining: DAILY_LIMIT - total, total };
+}
 const { applyOurTag, detectStore, extractAsin, getAmazonProductInfo } = require('./affiliates');
 
 const app  = express();
@@ -1330,6 +1345,8 @@ app.post('/api/deals/check-duplicate', auth, async (req, res) => {
 
 app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
   try {
+    const limit = await checkDailyLimit(req.user.id, req.user.email);
+    if (!limit.ok) return fail(res, `Has alcanzado el límite diario de ${DAILY_LIMIT} publicaciones. Vuelve mañana.`);
     const { title, url: rawUrl, deal_price, original_price, store, category,
             description, discount_code, availability, store_location, starts_at, expires_at: customExpires, cover_index } = req.body;
     if (!title || !deal_price) return fail(res, 'Título y precio son obligatorios');
@@ -1864,6 +1881,8 @@ app.get('/api/places', optAuth, async (req, res) => {
 
 app.post('/api/places', auth, async (req, res) => {
   try {
+    const limit2 = await checkDailyLimit(req.user.id, req.user.email);
+    if (!limit2.ok) return fail(res, `Has alcanzado el límite diario de ${DAILY_LIMIT} publicaciones. Vuelve mañana.`);
     const { name, category: rawCat, lat, lng, address, city, price_range, monthly_fee, subcategory } = req.body;
     const parsedLat = parseFloat(lat), parsedLng = parseFloat(lng);
     if (!name||!rawCat||isNaN(parsedLat)||isNaN(parsedLng)) return fail(res, 'Faltan campos obligatorios');
@@ -1971,6 +1990,8 @@ app.get('/api/prices/recent', async (req, res) => {
 
 app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
   try {
+    const limit3 = await checkDailyLimit(req.user.id, req.user.email);
+    if (!limit3.ok) return fail(res, `Has alcanzado el límite diario de ${DAILY_LIMIT} publicaciones. Vuelve mañana.`);
     const { place_id, product, price, unit } = req.body;
     if (!place_id||!product||!price) return fail(res, 'Faltan campos');
     const parsedPrice = parseFloat(price);
@@ -2249,6 +2270,8 @@ app.get('/api/events', async (req, res) => {
 
 app.post('/api/events', auth, upload.single('image'), async (req, res) => {
   try {
+    const limit4 = await checkDailyLimit(req.user.id, req.user.email);
+    if (!limit4.ok) return fail(res, `Has alcanzado el límite diario de ${DAILY_LIMIT} publicaciones. Vuelve mañana.`);
     const { title, category, date, time, venue, address, city, lat, lng, price_from, is_free, url, description } = req.body;
     if (!title||!category||!date) return fail(res, 'Título, categoría y fecha son obligatorios');
     const evLat = lat ? (parseFloat(lat)||null) : null;
