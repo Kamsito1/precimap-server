@@ -1975,13 +1975,36 @@ app.get('/api/events', async (req, res) => {
   } catch(e) { fail(res, e.message, 500); }
 });
 
-app.post('/api/events', auth, async (req, res) => {
+app.post('/api/events', auth, upload.single('image'), async (req, res) => {
   try {
     const { title, category, date, time, venue, address, city, lat, lng, price_from, is_free, url, description } = req.body;
     if (!title||!category||!date) return fail(res, 'Título, categoría y fecha son obligatorios');
     const evLat = lat ? (parseFloat(lat)||null) : null;
     const evLng = lng ? (parseFloat(lng)||null) : null;
-    const event = await db.insert('events', { title: title.trim(), category, date, time: time||null, venue: venue||null, address: address||null, city: city||null, lat: evLat, lng: evLng, price_from: price_from?(parseFloat(price_from)||null):null, is_free: is_free?1:0, url: url||null, description: description||null, reported_by: req.user.id, source: 'user', is_active: 1, votes_up: 0 });
+    // Handle image upload
+    let photos = [];
+    if (req.file) {
+      try {
+        const buf = fs.readFileSync(req.file.path);
+        const ext = req.file.originalname.split('.').pop();
+        const p = `events/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: req.file.mimetype });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
+          photos = [publicUrl];
+          fs.unlinkSync(req.file.path);
+        }
+      } catch { if (req.file.filename) photos = [`/public/uploads/${req.file.filename}`]; }
+    }
+    const event = await db.insert('events', {
+      title: title.trim(), category, date, time: time||null,
+      venue: venue||null, address: address||null, city: city||null,
+      lat: evLat, lng: evLng,
+      price_from: price_from?(parseFloat(price_from)||null):null,
+      is_free: is_free?1:0, url: url||null, description: description||null,
+      reported_by: req.user.id, source: 'user', is_active: 1, votes_up: 0,
+      photos: JSON.stringify(photos),
+    });
     await addPoints(req.user.id, 5, 'añadir evento');
     res.json(event);
   } catch(e) { fail(res, e.message); }
