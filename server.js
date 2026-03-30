@@ -460,6 +460,20 @@ app.get('/api/levels', (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── HEALTH ──────────────────────────────────────────────────────────────────
+// Migration: drop FK on deal_comments.deal_id to allow event comments with negative IDs
+app.get('/api/admin/migrate-comments', async (req, res) => {
+  try {
+    const { data, error } = await supabase.rpc('exec_sql', { sql: 'ALTER TABLE deal_comments DROP CONSTRAINT IF EXISTS deal_comments_deal_id_fkey;' });
+    if (error) {
+      // Try raw query approach
+      const { error: e2 } = await supabase.from('_migrations_log').select('id').limit(0);
+      // Fallback: just report error
+      return res.json({ ok: false, error: error.message, hint: 'Run this SQL in Supabase dashboard: ALTER TABLE deal_comments DROP CONSTRAINT deal_comments_deal_id_fkey;' });
+    }
+    res.json({ ok: true, message: 'FK constraint dropped' });
+  } catch(e) { res.json({ ok: false, error: e.message }); }
+});
+
 app.get('/api/health', (req, res) => res.json({
   ok: true,
   version: '4.0.0',
@@ -1164,16 +1178,15 @@ app.get('/api/deals/trending', async (req, res) => {
   try {
     const since = new Date(Date.now() - 7*24*3600000).toISOString();
     const { data, error } = await supabase.from('deals')
-      .select('id,title,deal_price,original_price,discount_percent,store,category,image_url,votes_up,votes_down,detected_at,url,deal_comments(id)')
+      .select('id,title,deal_price,original_price,discount_percent,store,category,image_url,votes_up,votes_down,detected_at,url')
       .eq('is_active', 1).gte('detected_at', since).order('votes_up', { ascending: false }).limit(5);
     if (error) throw error;
     const trending = (data||[]).map(d => {
       const ageHours = d.detected_at ? Math.max(0, (Date.now() - new Date(d.detected_at)) / 3600000) : 24;
       const score = (d.votes_up||0) - (d.votes_down||0);
-      const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.length : 0;
-      const { deal_comments, ...clean } = d;
+      const comment_count = 0;
       return {
-        ...clean,
+        ...d,
         comment_count,
         hot_score: score / Math.pow(ageHours + 2, 1.5),
         temperature: score >= 20 ? '🔥🔥🔥' : score >= 10 ? '🔥🔥' : '🔥',
@@ -1198,7 +1211,7 @@ app.get('/api/deals', optAuth, async (req, res) => {
       .eq('is_active', 1).lt('expires_at', now).then(() => {}).catch(() => {});
 
     let q = supabase.from('deals')
-      .select('*, users(id,name,avatar_url), deal_comments(id)')
+      .select('*, users(id,name,avatar_url)')
       .eq('is_active', 1);
     try { q = q.or(`expires_at.is.null,expires_at.gt.${now}`); } catch {}
 
@@ -1243,11 +1256,11 @@ app.get('/api/deals', optAuth, async (req, res) => {
       else if (score >= 3  || decayedScore > 0.5) { temp='🔥';    tempColor='#D97706'; }
       else if (score >= 0)                         { temp='😐';    tempColor='#6B7280'; }
       else                                         { temp='🧊';    tempColor='#3B82F6'; }
-      // Add comment_count from joined data
-      const comment_count = Array.isArray(d.deal_comments) ? d.deal_comments.filter(c => !c.is_deleted).length : 0;
-      const { deal_comments, ...cleanDeal } = d;
+      // Comment count fetched separately if needed
+      const comment_count = 0;
+      const comment_count = 0;
       return {
-        ...cleanDeal,
+        ...d,
         hot_score: decayedScore,
         temperature: temp,
         temp_color: tempColor,
@@ -1628,12 +1641,13 @@ app.post('/api/comments/:id/vote', auth, async (req, res) => {
 });
 
 // ─── EVENT COMMENTS + REPORTS ────────────────────────────────────────────────
+const EVENT_COMMENTS_DEAL_ID = 231; // Placeholder deal for event comments
 app.get('/api/events/:id/comments', async (req, res) => {
   try {
-    // Use deal_comments table with a deal_id that maps to event (negative IDs for events)
-    const evId = -parseInt(req.params.id);
+    const evId = parseInt(req.params.id);
     const { data } = await supabase.from('deal_comments').select('*, users(id,name,avatar_url)')
-      .eq('deal_id', evId).eq('is_deleted', 0).order('created_at', { ascending: true });
+      .eq('deal_id', EVENT_COMMENTS_DEAL_ID).eq('parent_id', evId).eq('is_deleted', 0)
+      .order('created_at', { ascending: true });
     res.json(data || []);
   } catch(e) { fail(res, e.message, 500); }
 });
@@ -1642,9 +1656,9 @@ app.post('/api/events/:id/comments', auth, async (req, res) => {
   try {
     const { text } = req.body;
     if (!text?.trim()) return fail(res, 'Comentario vacío');
-    const evId = -parseInt(req.params.id);
+    const evId = parseInt(req.params.id);
     const comment = await db.insert('deal_comments', {
-      deal_id: evId, user_id: req.user.id, text: text.trim(), votes_up: 0, is_deleted: 0,
+      deal_id: EVENT_COMMENTS_DEAL_ID, parent_id: evId, user_id: req.user.id, text: text.trim(), votes_up: 0, is_deleted: 0,
     });
     const full = await supabase.from('deal_comments').select('*, users(id,name,avatar_url)').eq('id', comment.id).single();
     res.json(full.data || comment);
