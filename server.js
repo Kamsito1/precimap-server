@@ -1371,13 +1371,13 @@ app.post('/api/deals', auth, upload.single('image'), async (req, res) => {
         const buf = fs.readFileSync(req.file.path);
         const ext = req.file.originalname.split('.').pop();
         const p = `deals/${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: req.file.mimetype });
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { upsert: true, contentType: req.file.mimetype });
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
           image_url = publicUrl;
           fs.unlinkSync(req.file.path);
         }
-      } catch { image_url = `/public/uploads/${req.file.filename}`; }
+      } catch(e) { console.error('Image upload failed:', e.message); }
     }
     if (!image_url && req.body.image_base64) {
       try {
@@ -1437,13 +1437,13 @@ app.post('/api/deals/:id/images', auth, upload.single('image'), async (req, res)
         const buf = fs.readFileSync(req.file.path);
         const ext = req.file.originalname.split('.').pop();
         const p = `deals/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: req.file.mimetype });
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { upsert: true, contentType: req.file.mimetype });
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
           image_url = publicUrl;
           fs.unlinkSync(req.file.path);
         }
-      } catch { image_url = `/public/uploads/${req.file.filename}`; }
+      } catch(e) { console.error('Image upload failed:', e.message); }
     }
     // Support base64 upload (from React Native)
     if (!image_url && req.body.image_base64) {
@@ -2082,7 +2082,7 @@ app.post('/api/prices', auth, upload.single('photo'), async (req, res) => {
         const buf = fs.readFileSync(req.file.path);
         const ext = req.file.originalname.split('.').pop();
         const p = `prices/${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: req.file.mimetype });
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { upsert: true, contentType: req.file.mimetype });
         if (!upErr) { const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p); photo_url = publicUrl; fs.unlinkSync(req.file.path); }
       } catch { photo_url = `/public/uploads/${req.file.filename}`; }
     }
@@ -2361,7 +2361,7 @@ app.post('/api/events', auth, upload.single('image'), async (req, res) => {
         const buf = fs.readFileSync(req.file.path);
         const ext = req.file.originalname.split('.').pop();
         const p = `events/${Date.now()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { contentType: req.file.mimetype });
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { upsert: true, contentType: req.file.mimetype });
         if (!upErr) {
           const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
           photos = [publicUrl];
