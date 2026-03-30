@@ -1544,7 +1544,7 @@ app.patch('/api/deals/:id', auth, upload.single('image'), async (req, res) => {
           updates.image_url = publicUrl;
           const currentPhotos = req.body.photos || [];
           currentPhotos.push(publicUrl);
-          updates.images = JSON.stringify(currentPhotos);
+          updates.images = currentPhotos;
         }
       } catch(e) { console.error('Edit image upload failed:', e.message); }
     }
