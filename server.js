@@ -1515,7 +1515,7 @@ app.patch('/api/deals/:id', auth, upload.single('image'), async (req, res) => {
     if (url) updates.url = url;
     if (discount_code !== undefined) updates.discount_code = discount_code;
     if (req.body.photos && Array.isArray(req.body.photos)) {
-      updates.images = JSON.stringify(req.body.photos);
+      updates.images = req.body.photos;
       if (req.body.photos.length > 0) updates.image_url = req.body.photos[0];
     }
     // Handle file upload via multer
