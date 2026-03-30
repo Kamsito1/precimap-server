@@ -1498,7 +1498,7 @@ app.post('/api/deals/:id/vote', auth, async (req, res) => {
 });
 
 // Edit deal — owner can edit their own, admin can edit any
-app.patch('/api/deals/:id', auth, async (req, res) => {
+app.patch('/api/deals/:id', auth, upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
     const deal = await db.query('deals', { eq: { id: parseInt(id) }, single: true });
@@ -1517,6 +1517,20 @@ app.patch('/api/deals/:id', auth, async (req, res) => {
     if (req.body.photos && Array.isArray(req.body.photos)) {
       updates.images = JSON.stringify(req.body.photos);
       if (req.body.photos.length > 0) updates.image_url = req.body.photos[0];
+    }
+    // Handle file upload via multer
+    if (req.file) {
+      try {
+        const buf = fs.readFileSync(req.file.path);
+        const ext = req.file.originalname.split('.').pop();
+        const p = `deals/${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { upsert: true, contentType: req.file.mimetype });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
+          updates.image_url = publicUrl;
+          fs.unlinkSync(req.file.path);
+        }
+      } catch(e) { console.error('Edit file upload failed:', e.message); }
     }
     // Handle new base64 image upload
     if (req.body.image_base64) {
