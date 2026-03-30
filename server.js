@@ -1258,7 +1258,6 @@ app.get('/api/deals', optAuth, async (req, res) => {
       else                                         { temp='🧊';    tempColor='#3B82F6'; }
       // Comment count fetched separately if needed
       const comment_count = 0;
-      const comment_count = 0;
       return {
         ...d,
         hot_score: decayedScore,
