@@ -1518,6 +1518,22 @@ app.patch('/api/deals/:id', auth, async (req, res) => {
       updates.images = JSON.stringify(req.body.photos);
       if (req.body.photos.length > 0) updates.image_url = req.body.photos[0];
     }
+    // Handle new base64 image upload
+    if (req.body.image_base64) {
+      try {
+        const b64 = req.body.image_base64.replace(/^data:image\/\w+;base64,/, '');
+        const buf = Buffer.from(b64, 'base64');
+        const p = `deals/${Date.now()}.jpg`;
+        const { error: upErr } = await supabase.storage.from('precimap').upload(p, buf, { upsert: true, contentType: 'image/jpeg' });
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from('precimap').getPublicUrl(p);
+          updates.image_url = publicUrl;
+          const currentPhotos = req.body.photos || [];
+          currentPhotos.push(publicUrl);
+          updates.images = JSON.stringify(currentPhotos);
+        }
+      } catch(e) { console.error('Edit image upload failed:', e.message); }
+    }
     if (original_price && deal_price) updates.discount_percent = ((parseFloat(String(original_price).replace(',','.')) - parseFloat(String(deal_price).replace(',','.'))) / parseFloat(String(original_price).replace(',','.')) * 100);
     await db.update('deals', parseInt(id), updates);
     res.json({ ok: true });
